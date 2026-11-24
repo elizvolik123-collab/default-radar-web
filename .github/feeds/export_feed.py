@@ -1,5 +1,6 @@
 """Write public, read-only JSON endpoints from a consistent market snapshot."""
 import json
+import os
 from contextlib import closing
 from pathlib import Path
 
@@ -29,3 +30,8 @@ def export(out):
             directory.append({"issuer":inn,"name":name,"report":relative,"active":inn in active,
                               "latest_statement":reports[0]["published"] if reports else None})
         write(root/"issuers.json",{"date":at[:10],"issuers":directory})
+        active_rows=[r for r in directory if r["active"]]
+        write(root/"collection.json",{"date":at[:10],"active_issuers":len(active_rows),
+              "with_numeric_statements":sum(bool(r["latest_statement"]) for r in active_rows),
+              "interfax_key_configured":bool(os.getenv("INTERFAX_API_KEY")),
+              "interfax_cursor_present":bool(facts.execute("SELECT 1 FROM disclosure_cursor LIMIT 1").fetchone())})
