@@ -95,6 +95,17 @@ def fundamentals(db):
             if r["emitent_inn"]:mapping[r["secid"]]=str(r["emitent_inn"])
     except OSError as exc:
         print("Справочник акций Мосбиржи загружен частично:",type(exc).__name__,flush=True)
+    def resolve_ticker(symbol):
+        # A missed page of MOEX's catalogue must not silently exclude an issuer.
+        try:
+            rows=records(iss("securities",q=symbol,**{"iss.only":"securities","securities.columns":"secid,emitent_inn,group"}),"securities")
+        except OSError:
+            return symbol,None
+        exact={str(r["emitent_inn"]) for r in rows if r["secid"]==symbol and r.get("emitent_inn") and r.get("group")=="stock_shares"}
+        return symbol,exact.pop() if len(exact)==1 else None
+    with ThreadPoolExecutor(4) as pool:
+        for symbol,inn in pool.map(resolve_ticker,sorted(symbols-mapping.keys())):
+            if inn:mapping[symbol]=inn
     picked = {}
     for ticker in sorted(symbols, key=lambda key:(len(key),key)):
         inn = mapping.get(ticker)

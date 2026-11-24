@@ -25,7 +25,7 @@ function marketDashboard(m) {
   const points=row.points.filter(p=>p[0]>=dtadd(row.day,1-marketWindow));
   return '<section class="panel macro" id="macroPanel"><h2>Рыночные индикаторы</h2><div class="macro-grid">'+m.series.map(s=>
     '<button class="macro-card '+(s.code===row.code?'selected':'')+'" data-index="'+esc(s.code)+'" aria-pressed="'+(s.code===row.code)+'"><small>'+esc(s.label)+'</small><strong>'+fmt(s.value)+' '+esc(s.unit)+'</strong><span>'+esc(changeText(s))+' · '+dt(s.day,false)+'</span></button>').join('')+
-    '</div><div class="section-head"><div><h3>'+esc(row.label)+'</h3><span class="minor">'+esc(row.code)+' · '+esc(row.unit)+'</span></div><div class="seg">'+[30,90,365].map(n=>'<button data-market-days="'+n+'" class="'+(n===marketWindow?'sel':'')+'">'+n+' д</button>').join('')+'</div></div>'+
+    '</div><div class="section-head"><div><h3>'+esc(row.label)+'</h3><span class="minor">'+esc(row.code)+' · '+esc(row.unit)+'</span></div><div class="seg">'+[30,90,365,730].map(n=>'<button data-market-days="'+n+'" class="'+(n===marketWindow?'sel':'')+'">'+(n>=365?(n/365)+' г':n+' д')+'</button>').join('')+'</div></div>'+
     seriesPlot(points,row.label,row.unit,row.code==='KEY')+'<div class="sourcebar">'+link(row.url,row.code==='KEY'?'Банк России':'ПАО Московская Биржа')+'<span>Данные на '+dt(row.day)+'</span></div></section>';
 }
 document.addEventListener('click',e=>{
@@ -42,7 +42,7 @@ function newsFeed(m){
 function ticker(rows, liveTimes={}) {
   const el=$('marketTape');
   if (!rows.length) {el.hidden=true;return;}
-  const part=rows.map(s=>'<span><b>'+esc(s.code==='KEY'?'Ключевая ставка':s.code)+'</b> '+fmt(s.value)+' '+esc(s.unit)+' <small>'+esc(changeText(s))+' · '+dt(s.day,false)+(liveTimes[s.code]?' '+esc(liveTimes[s.code])+' МСК':'')+'</small></span>').join('');
+  const part=rows.map(s=>'<span><b>'+esc(s.board?s.label:s.code==='KEY'?'Ключевая ставка':s.code)+'</b> '+fmt(s.value)+' '+esc(s.unit)+' <small>'+esc(changeText(s))+' · '+dt(s.day,false)+(liveTimes[s.code]?' '+esc(liveTimes[s.code])+' МСК':'')+'</small></span>').join('');
   el.hidden=false;
   el.querySelector('.tape-track').innerHTML='<div>'+part+'</div><div aria-hidden="true">'+part+'</div>';
 }
@@ -59,14 +59,14 @@ async function refreshTape(snapshotRows) {
   const token=++tapeSeq, cut=state.date+'|'+state.time;
   let rows=snapshotRows || macroCache.get(cut);
   if(!rows){
-    try {rows=(await api('/api/macro?'+params())).series;} catch {return;}
+    try {const m=await api('/api/macro?'+params());rows=[...m.series,...m.bonds];} catch {return;}
   }
   if(token!==tapeSeq)return;
   macroCache.set(cut,rows);ticker(rows);
   if(state.date!==marketDay||state.time||document.hidden)return;
   const times={};
   try {
-    const codes=rows.filter(s=>s.code!=='KEY').map(s=>s.code);
+    const codes=rows.filter(s=>s.code!=='KEY'&&!s.board).map(s=>s.code);
     const m=await official('engines/stock/markets/index/boards/SNDX/securities',{securities:codes.join(','),'iss.only':'marketdata','marketdata.columns':'SECID,CURRENTVALUE,LASTVALUE,TRADEDATE,UPDATETIME'});
     const market=issRows(m.marketdata);
     const updated=rows.map(s=>{
@@ -82,27 +82,39 @@ const chartCache=new Map();
 async function extendChart(item){
   if(!item.board)return;
   const end=state.time||state.date===marketDay?dtadd(state.date,-1):state.date;
-  const path='engines/stock/markets/bonds/boards/'+encodeURIComponent(item.board)+'/securities/'+encodeURIComponent(item.bond.secid)+'/candles';
+  const path='history/engines/stock/markets/bonds/boards/'+encodeURIComponent(item.board)+'/securities/'+encodeURIComponent(item.bond.secid);
   const key=[path,item.start,end].join('|');
   try{
     let rows=chartCache.get(key);
     if(!rows){
-      const j=await official(path,{interval:24,from:item.start,till:end,'candles.columns':'begin,close,value,volume'});
-      rows=issRows(j.candles).filter(r=>Number.isFinite(r.close)&&r.volume>0);
+      rows=[];
+      for(let offset=0; ;){
+        const j=await official(path,{from:item.start,till:end,start:offset,'iss.only':'history,history.cursor','history.columns':'TRADEDATE,CLOSE,VALUE,NUMTRADES,YIELDCLOSE,ACCINT,COUPONVALUE,COUPONPERCENT,CURRENCYID,FACEUNIT'});
+        const block=issRows(j.history);rows.push(...block);offset+=block.length;
+        if(!block.length||offset>=(j['history.cursor']?.data[0]?.[1]??offset))break;
+      }
       chartCache.set(key,rows);
     }
     if(data!==item||!rows.length)return;
     const all=new Map(item.quotes.map(r=>[r.day,r]));
-    for(const r of rows){const day=r.begin.slice(0,10);if(!all.has(day)&&day<=end)all.set(day,{day,price:r.close,volume:r.value,board:item.board});}
+    for(const r of rows){if(r.TRADEDATE<=end && r.NUMTRADES>0 && Number.isFinite(r.CLOSE))all.set(r.TRADEDATE,{day:r.TRADEDATE,price:r.CLOSE,volume:r.VALUE,trades:r.NUMTRADES,yield_close:r.YIELDCLOSE,board:item.board});}
     item.quotes=[...all.values()].sort((a,b)=>a.day.localeCompare(b.day));
+    const observed=rows.filter(r=>r.TRADEDATE<=end && r.ACCINT!=null).at(-1);
+    if(observed&&(!item.terms||observed.TRADEDATE>item.terms.seen.slice(0,10))){
+      item.terms={seen:observed.TRADEDATE,board:item.board,trade_day:observed.TRADEDATE,accrued:observed.ACCINT,
+        settlement_currency:observed.CURRENCYID,currency:observed.FACEUNIT,coupon:observed.COUPONVALUE,rate:observed.COUPONPERCENT,
+        source:'https://iss.moex.com/iss/'+path+'.json?from='+observed.TRADEDATE+'&till='+observed.TRADEDATE};
+      if($('coupons'))$('coupons').outerHTML=couponPanel(item);
+    }
     if($('price'))$('price').outerHTML=price();
   }catch{ /* Keep the archived chart when the exchange is unreachable. */ }
 }
 function couponPanel(item){
   const t=item.terms, plan=item.plans.find(p=>p.bond===item.bond.id && p.kind==='Купон');
+  const currentCoupon=t?.due>=state.date?t:null;
   const val=(n,c)=>n==null?'Нет данных':fmt(n)+' '+esc(cashCurrency(c||''));
-  const boxes=[['НКД на одну бумагу',val(t?.accrued,t?.settlement_currency),t?.settle?'Расчёты '+dt(t.settle):'На выбранную дату'],
-    ['Ближайший купон',val(t?.coupon??plan?.per_unit,t?.coupon!=null?t.currency:plan?.currency),dt(t?.due||plan?.date)],
+  const boxes=[['НКД на одну бумагу',val(t?.accrued,t?.settlement_currency),t?.settle?'Расчёты '+dt(t.settle):t?.trade_day?'Торговая дата '+dt(t.trade_day):'На выбранную дату'],
+    [t?.trade_day&&!plan?'Купон на дату торгов':'Ближайший купон',val(currentCoupon?.coupon??plan?.per_unit??(t?.trade_day?t.coupon:null),currentCoupon||!plan?t?.currency:plan.currency),dt(currentCoupon?.due||plan?.date||t?.trade_day)],
     ['Купонная ставка',t?.rate==null?'Нет данных':fmt(t.rate)+'%','Годовых'],
     ['Купонный период',t?.period?fmt(t.period)+' дн.':'Нет данных','По условиям выпуска']];
   return '<section class="panel" id="coupons"><h3>НКД и купонные выплаты</h3><div class="metrics">'+boxes.map(([k,v,sub])=>'<div><small>'+k+'</small><strong>'+v+'</strong><small>'+sub+'</small></div>').join('')+'</div><div class="sourcebar">'+link(t?.source||plan?.source||item.bond.source,'Московская биржа')+'<span>'+ (t?'Снимок '+dt(t.seen)+' · '+esc(t.board):'Параметры НКД на этот срез не опубликованы')+'</span></div></section>';
@@ -114,7 +126,7 @@ function defaultEvidence(item){
     missed?'<strong>Документирована просрочка выплаты</strong><p>'+esc(missed.kind)+' · срок '+dt(missed.due)+'.</p>'+link(missed.url,missed.source):
     '<p>На дату среза в подключённых источниках нет записи о дефолте этого выпуска.</p>';
   return '<section class="panel" id="defaultEvidence"><h3>Платёжные нарушения по документам</h3>'+text+
-    '<p class="sub">Статус относится к указанному обязательству. Рыночный сигнал в прогнозе и финансовые коэффициенты помогают оценивать риск следующих выплат.</p></section>';
+    '<p class="sub">Статус относится к указанному обязательству.</p><details><summary>Как радар устанавливает нарушение</summary><p>Для выпуска сопоставляются вид платежа, договорный срок и раскрытие об исполнении. Если в реестре Мосбиржи есть запись, карточка воспроизводит её формулировку: «Технический дефолт» или «Дефолт». Позднейшее исполнение показывается отдельной датой. Отсутствие публикации оставляет исход неизвестным.</p><p>Финансовые коэффициенты и динамика цены помогают оценивать риск будущего платежа. Численная вероятность дефолта в этой версии не рассчитывается.</p></details></section>';
 }
 async function copyForChatGPT(){
   const list=chats.get(chatKey())||[];
