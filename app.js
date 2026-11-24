@@ -95,28 +95,55 @@ function overview(){
   ].map(([k,v,n])=>'<div><small>'+esc(k)+'</small><strong>'+esc(v)+'</strong><small>'+esc(n)+'</small></div>').join('')+'</div><div class="sourcebar"><span>Срез на '+dt(state.date)+(state.time?' · '+esc(state.time):' · конец дня')+' МСК</span><div class="row-links">'+link(b.source,'Справочник выпуска')+'<button data-action="details">Реквизиты и режимы</button></div></div></div>';
 }
 function cashCurrency(c){return ['RUB','SUR','RUR'].includes(c)?'₽':c||'';}
+let chartStyle='candles', chartVolume='quantity';
+const directionClass=delta=>delta==null||delta===0?'trade-flat':delta>0?'trade-up':'trade-down';
+const hasCandle=p=>[p.open,p.high,p.low,p.price].every(Number.isFinite)&&p.low<=Math.min(p.open,p.price)&&p.high>=Math.max(p.open,p.price);
 function chartPrice(){
-  const q=data.quotes,w=620,h=185,left=40,right=12,top=13,bottom=108,voltop=129,volbase=158;
-  if(window.pagesRadar&&!q.length)return '<p class="empty">В опубликованном срезе нет сделок за выбранный период.</p>'+link(data.bond.source,'Открыть выпуск на бирже','lightbtn');
-  if(!q.length)return '<p class="empty">Нет сохранённых сделок за выбранный период. Можно запросить историю у Московской биржи.</p><button class="outline" data-action="refresh">Загрузить историю и календарь</button>';
-  const prices=q.map(p=>p.price),low=Math.min(...prices),high=Math.max(...prices),pad=Math.max(.04,(high-low)*.10), ymin=low-pad,ymax=high+pad;
-  const start=fromDay(data.start),end=fromDay(state.date),x=d=>left+(fromDay(d)-start)/Math.max(1,end-start)*(w-left-right),y=v=>top+(ymax-v)/(ymax-ymin)*(bottom-top),maxvol=Math.max(...q.map(p=>p.volume??0),1);
-  const grid=[0,.5,1].map(t=>{const yy=top+(bottom-top)*t;return '<path d="M'+left+' '+yy+'H'+(w-right)+'" stroke="#dce5e6" stroke-dasharray="3 4"/><text x="0" y="'+(yy+4)+'">'+fmt(ymax-(ymax-ymin)*t,1)+'</text>';}).join('');
-  let segs=[],line=[];
-  for(let i=0;i<q.length;i++){
-    if(i&&fromDay(q[i].day)-fromDay(q[i-1].day)>1){segs.push(line);line=[];}
-    line.push([x(q[i].day),y(q[i].price)]);
-  }
-  segs.push(line);
-  const lines=segs.map(s=>'<polyline points="'+s.map(p=>p.join(',')).join(' ')+'" fill="none" stroke="#157c70" stroke-width="2.5" stroke-linejoin="round"/>').join('');
-  const circles=q.map(p=>'<circle cx="'+x(p.day)+'" cy="'+y(p.price)+'" r="2.3" fill="#157c70"/>').join('');
-  const barw=Math.max(2,Math.min(13,(w-left-right)/(end-start+1)*.56));
-  const volumes=q.filter(p=>p.volume!=null).map(p=>{const height=p.volume/maxvol*(volbase-voltop);return '<rect x="'+(x(p.day)-barw/2)+'" y="'+(volbase-height)+'" width="'+barw+'" height="'+height+'" rx="1" fill="#8abeb4"/>';}).join('');
-  const active=state.point&&q.find(v=>v.day===state.point);
-  const markers=[...new Set(data.events.map(e=>e.published.slice(0,10)))].filter(d=>d>=data.start&&d<=state.date).map(d=>'<g role="button" tabindex="0" aria-label="Документы за '+d+'" data-marker="'+d+'"><path d="M'+x(d)+' '+top+'V'+bottom+'" stroke="#bc8946" stroke-dasharray="3 4"/><circle cx="'+x(d)+'" cy="'+top+'" r="7" fill="#d6a151"/><circle cx="'+x(d)+'" cy="'+top+'" r="2" fill="white"/></g>').join('');
-  const hits=q.map(p=>'<circle tabindex="0" role="button" aria-label="'+dt(p.day)+', '+fmt(p.price)+' процентов" class="plotpoint" data-point="'+p.day+'" cx="'+x(p.day)+'" cy="'+y(p.price)+'" r="7" fill="transparent"><title>'+dt(p.day)+' · '+fmt(p.price)+'%</title></circle>').join('');
-  return '<div class="chart-meta"><strong>'+fmt(q.at(-1).price)+' %</strong><span class="minor">закрытие · '+dt(q.at(-1).day,false)+'</span></div><div class="legend"><span><b class="dot"></b>Цена, % номинала</span><span><b class="dot" style="background:#8abeb4"></b>Оборот, млн '+esc(cashCurrency(q[0].currency))+'</span><span><b class="dot" style="background:#d6a151"></b>Публикация</span></div><svg class="chart" viewBox="0 0 '+w+' '+h+'" aria-label="История цены и оборота, нажмите на точку или отметку публикации">'+grid+lines+circles+volumes+'<text x="0" y="'+(voltop+5)+'">'+fmt(maxvol/1e6,1)+'</text><text x="0" y="'+volbase+'">0</text><path d="M'+left+' '+volbase+'H'+(w-right)+'" stroke="#dce5e6"/>'+[0,.5,1].map((t,i)=>'<text x="'+(left+(w-left-right)*t)+'" y="179" text-anchor="'+['start','middle','end'][i]+'">'+dt(dtadd(data.start,Math.round((end-start)*t)),false)+'</text>').join('')+hits+markers+'</svg>'+(q.length<5&&!window.pagesRadar?'<button class="textbtn" data-action="refresh">Обновить историю торгов →</button>':'')+(active?'<div class="inset">'+dt(active.day)+' · '+fmt(active.price)+'% · '+fmt(active.trades)+' сделок · оборот '+fmt(active.volume)+' '+esc(cashCurrency(active.currency))+'</div>':'');
+  const q=data.quotes.filter(p=>Number.isFinite(p.price));
+  if(!q.length)return '<p class="empty">За выбранный период нет сохранённых сделок.</p>'+link(data.bond.source,'Данные выпуска на бирже');
+  const candleMode=chartStyle==='candles'&&q.some(hasCandle);
+  const quantity=chartVolume==='quantity'&&q.some(p=>Number.isFinite(p.quantity));
+  const axisLabel=quantity?'Объём, шт.':'Оборот, млн '+cashCurrency(q.find(p=>p.currency)?.currency);
+  const volume=p=>quantity?p.quantity:(p.volume==null?null:p.volume/1e6);
+  const maxVol=Math.max(1,...q.map(p=>volume(p)||0));
+  const min=Math.min(...q.map(p=>candleMode&&hasCandle(p)?p.low:p.price));
+  const max=Math.max(...q.map(p=>candleMode&&hasCandle(p)?p.high:p.price));
+  const pad=Math.max(.01,(max-min)*.09), lo=min-pad, hi=max+pad;
+  const start=fromDay(q[0].day),end=fromDay(q.at(-1).day);
+  const x=d=>end===start?402:68+668*(fromDay(d)-start)/(end-start);
+  const y=v=>16+145*(hi-v)/(hi-lo);
+  const width=Math.min(18,Math.max(.6,480/(end-start+1)));
+  const grid=[0,.5,1].map(t=>'<path class="trade-grid" d="M48 '+(16+t*145)+'H751"/><text x="0" y="'+(20+t*145)+'">'+fmt(hi-t*(hi-lo),2)+'</text>').join('');
+  const sign=v=>(v>0?'+':'')+fmt(v,2);
+  const describe=p=>[dt(p.day),data.board,hasCandle(p)?'Откр. '+fmt(p.open)+' · макс. '+fmt(p.high)+' · мин. '+fmt(p.low):'', 'закр. '+fmt(p.price)+'% ном.',p.quantity!=null?fmt(p.quantity)+' шт.':'',p.volume!=null?'оборот '+fmt(p.volume)+' '+cashCurrency(p.currency):'',p.trades!=null?fmt(p.trades)+' сделок':''].filter(Boolean).join(' · ');
+  let prices='',bars='',hits='';
+  q.forEach((p,i)=>{
+    const prev=q[i-1],cx=x(p.day),full=candleMode&&hasCandle(p);
+    const change=full?p.price-p.open:prev?p.price-prev.price:null;
+    const cls=directionClass(change);
+    if(full){
+      prices+='<g class="ohlc '+cls+'"><path d="M'+cx+' '+y(p.high)+'V'+y(p.low)+'"/><rect x="'+(cx-width/2)+'" y="'+Math.min(y(p.open),y(p.price))+'" width="'+width+'" height="'+Math.max(1,Math.abs(y(p.open)-y(p.price)))+'"/></g>';
+    }else{
+      if(prev&&(!candleMode||!hasCandle(prev))&&fromDay(p.day)-fromDay(prev.day)<=7)
+        prices+='<path class="close-segment '+cls+'" d="M'+x(prev.day)+' '+y(prev.price)+'L'+cx+' '+y(p.price)+'"/>';
+      prices+='<circle class="close-dot '+cls+'" cx="'+cx+'" cy="'+y(p.price)+'" r="2"/>';
+    }
+    const v=volume(p);
+    if(v!=null){const h=44*v/maxVol;bars+='<rect class="trade-volume '+cls+'" x="'+(cx-width/2)+'" y="'+(225-h)+'" width="'+width+'" height="'+h+'"/>';}
+    hits+='<rect class="trade-hit" role="button" tabindex="0" data-point="'+p.day+'" aria-label="'+esc(describe(p))+'" x="'+(cx-Math.max(width,5)/2)+'" y="10" width="'+Math.max(width,5)+'" height="219"><title>'+esc(describe(p))+'</title></rect>';
+  });
+  const markers=[...new Set(data.events.map(e=>e.published.slice(0,10)))].filter(d=>d>=q[0].day&&d<=q.at(-1).day).map(d=>'<g role="button" tabindex="0" data-marker="'+d+'" aria-label="Документы за '+d+'"><path stroke="#bc8946" stroke-dasharray="3 4" d="M'+x(d)+' 10V161"/><circle cx="'+x(d)+'" cy="10" r="5" fill="#bc8946"/></g>').join('');
+  const active=q.find(p=>p.day===state.point)||q.at(-1),i=q.indexOf(active),pct=i&&q[i-1].price?100*(active.price/q[i-1].price-1):null;
+  const controls='<div class="seg"><button data-chart-style="candles" aria-pressed="'+candleMode+'" '+(q.some(hasCandle)?'':'disabled')+'>Свечи</button><button data-chart-style="line" aria-pressed="'+!candleMode+'">Линия</button><button data-chart-volume="quantity" aria-pressed="'+quantity+'" '+(q.some(p=>p.quantity!=null)?'':'disabled')+'>Объём, шт.</button><button data-chart-volume="value" aria-pressed="'+!quantity+'">Оборот</button></div>';
+  return controls+'<div class="chart-meta"><strong>'+fmt(active.price)+' %</strong>'+(pct==null?'':'<b class="'+directionClass(pct)+'">'+sign(pct)+'% к предыдущему закрытию</b>')+'</div><svg class="chart trade-chart" viewBox="0 0 770 250" aria-label="Дневные торги, цена в процентах номинала и объём">'+grid+prices+'<text x="2" y="182">'+esc(axisLabel)+'</text><text x="2" y="200">'+fmt(maxVol,1)+'</text><path class="trade-grid" d="M48 225H751"/>'+bars+'<text x="48" y="246">'+dt(q[0].day,false)+'</text><text x="751" y="246" text-anchor="end">'+dt(q.at(-1).day,false)+'</text>'+hits+markers+'</svg><p class="sub">'+esc(describe(active))+'</p>';
 }
+document.addEventListener('click',e=>{
+  const control=e.target.closest('[data-chart-style],[data-chart-volume]');
+  if(!control||!data)return;
+  if(control.dataset.chartStyle)chartStyle=control.dataset.chartStyle;
+  if(control.dataset.chartVolume)chartVolume=control.dataset.chartVolume;
+  $('price').outerHTML=price();
+});
 function price(){
   const url=data.board?'https://iss.moex.com/iss/history/engines/stock/markets/bonds/boards/'+encodeURIComponent(data.board)+'/securities/'+encodeURIComponent(data.bond.secid)+'.json?from='+data.start+'&till='+state.date:data.bond.source;
   return '<article class="panel focus-section" id="price"><div class="section-head"><h3>Цена и объём торгов</h3><div class="seg">'+[7,14,30,90,180,365,36500].map(n=>'<button data-period="'+n+'" class="'+(+state.period===n?'sel':'')+'">'+(n===36500?'Вся история':n===365?'1 г':n+' д')+'</button>').join('')+'</div></div>'+chartPrice()+(data.boards.length>1?'<label class="minor">Режим торгов <select id="boardSelect">'+data.boards.map(v=>'<option '+(v===data.board?'selected':'')+'>'+esc(v)+'</option>').join('')+'</select></label>':'')+'<div class="sourcebar">'+link(url,'MOEX ISS'+(data.board?' · '+data.board:''))+'<button class="textbtn" data-ask="price">Объяснить в чате →</button></div></article>';
@@ -170,7 +197,7 @@ function news(){
 function render(){
   if(!data)return;
   const list='<section class="panel"><div class="section-head"><h3>Другие выпуски эмитента</h3><button class="textbtn" data-action="search">Весь каталог →</button></div><div class="tablewrap"><table><thead><tr><th>Выпуск</th><th>ISIN</th><th>Последняя сохранённая сделка</th></tr></thead><tbody>'+data.shortlist.map(b=>'<tr><td><button data-bond="'+esc(b.id)+'">'+esc(b.name)+'</button></td><td class="mono">'+esc(b.isin)+'</td><td>'+dt(b.last_trade)+'</td></tr>').join('')+'</tbody></table></div></section>';
-  $('detail').innerHTML='<button class="textbtn" data-action="home">← Обзор рынка</button>'+timeline()+overview()+expertPanel(data)+radarPanel(data.radar)+defaultEvidence(data)+couponPanel(data)+forecastPanel(data.forecast)+financialPanel(data.financials||[])+filingPanel(data)+'<div class="grid">'+price()+calendar()+'</div><div class="charts-more">'+payment()+documents()+'</div>'+outcomeList()+riskPanel()+news()+extraAnalytics(data)+(data.shortlist.length?list:'');
+  $('detail').innerHTML='<button class="textbtn" data-action="home">← Обзор рынка</button>'+timeline()+overview()+expertPanel(data)+radarPanel(data.radar)+defaultEvidence(data)+paymentJournal(data)+couponPanel(data)+forecastPanel(data.forecast)+financialPanel(data.financials||[])+filingPanel(data)+'<div class="grid">'+price()+calendar()+'</div><div class="charts-more">'+payment()+documents()+'</div>'+outcomeList()+riskPanel()+news()+extraAnalytics(data)+(data.shortlist.length?list:'');
   renderChat();
 }
 function docModal(id){const d=data.documents.find(x=>x.id===id);if(!d)return;state.event=id;save();modal(d.title,'<p class="meta">'+esc(d.publisher)+' · '+esc(d.kind)+'</p><p class="modalbody">'+esc(d.body)+'</p><div class="doclist"><div class="lineitem"><span>Дата события</span>'+dt(d.occurred)+'</div><div class="lineitem"><span>Опубликовано</span>'+dt(d.published)+(d.published.includes('T')?' '+esc(d.published.slice(11,16))+' МСК':' · время не указано')+'</div><div class="lineitem"><span>Сохранено</span>'+dt(d.loaded)+'</div></div><div class="drawer-actions">'+link(d.url,'Открыть первоисточник','lightbtn')+(id==='ncr'?'<a class="lightbtn" href="documents/nkr-20260407.pdf" target="_blank" rel="noopener">Сохранённый PDF ↗</a>':'')+'<button class="primary" data-ask="doc">Объяснить в чате</button></div>');}

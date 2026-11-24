@@ -10,6 +10,9 @@ TAGS={"Revenue":"revenue","ProfitLoss":"net_income","Equity":"equity","Assets":"
       "CurrentAssets":"current_assets","CurrentLiabilities":"current_liabilities",
       "CashAndCashEquivalents":"cash","CashFlowsFromUsedInOperatingActivities":"ocf"}
 LIMIT=20*1024*1024
+TAGS.update(CurrentBorrowings="short_term_debt",NoncurrentBorrowings="long_term_debt",
+            InterestExpense="interest_expenses",ProfitLossFromOperatingActivities="operating_income",
+            Inventories="inventories")
 
 def statements(raw,issuer,published):
     if len(raw)>LIMIT:return []

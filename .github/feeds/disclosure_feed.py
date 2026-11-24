@@ -31,11 +31,11 @@ class NoRedirect(HTTPRedirectHandler):
 def gateway(db):
     token=os.environ.get("INTERFAX_API_KEY")
     if not token:
-        print("Интерфакс · для регулярной выгрузки требуется ключ владельца",flush=True)
+        print("::warning::Интерфакс: договорный шлюз пропущен, INTERFAX_API_KEY не настроен.",flush=True)
         return
     opener=build_opener(NoRedirect(),HTTPSHandler(context=MOEX_TLS))
     with connect() as catalog:
-        issuers={r[0] for r in catalog.execute("SELECT id FROM issuers WHERE inn IS NOT NULL")}
+        issuers={r[0] for r in catalog.execute("SELECT DISTINCT i.id FROM issuers i JOIN bonds b ON b.issuer=i.id WHERE b.traded=1 AND i.inn IS NOT NULL")}
         issue_owners=dict(catalog.execute("SELECT isin,issuer FROM bonds WHERE isin IS NOT NULL"))
     for entity in ("Files","Messages"):
         last=db.execute("SELECT event_id FROM disclosure_cursor WHERE entity=?",(entity,)).fetchone()

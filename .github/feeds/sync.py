@@ -121,11 +121,16 @@ def histories(db, secid, board, begin, end):
     key = row[0] if row else secid
     path = f"history/engines/stock/markets/bonds/boards/{quote(board)}/securities/{quote(secid)}"
     rows = list(pages(path,"history",**{"from":begin,"till":end}))
-    for r in rows:
-        if (r["NUMTRADES"] or 0)>0 and r["CLOSE"] is not None:
-            db.execute("INSERT OR REPLACE INTO quotes VALUES(?,?,?,?,?,?,?,?,?)",
-              (key,board,r["TRADEDATE"],r["CLOSE"],r["VALUE"],r["NUMTRADES"],r.get("YIELDCLOSE"),
-               r.get("CURRENCYID"),now()))
+    sessions=[r for r in rows if r.get("TRADINGSESSION") in (None,3) and (r["NUMTRADES"] or 0)>0 and r["CLOSE"] is not None]
+    from collect_market import save_sessions, SCHEMA, DATABASE
+    import sqlite3
+    with sqlite3.connect(DATABASE,timeout=45) as store:
+        store.executescript(SCHEMA)
+        save_sessions(store,sessions)
+    for r in sessions:
+        db.execute("INSERT OR REPLACE INTO quotes VALUES(?,?,?,?,?,?,?,?,?)",
+          (key,board,r["TRADEDATE"],r["CLOSE"],r["VALUE"],r["NUMTRADES"],r.get("YIELDCLOSE"),
+           r.get("CURRENCYID"),now()))
     return len(rows)
 
 

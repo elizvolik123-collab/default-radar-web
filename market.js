@@ -8,10 +8,13 @@ function seriesPlot(points, label, unit, step=false) {
   const start=Date.parse(points[0][0]), end=Date.parse(points.at(-1)[0]);
   const x=p=>68+(Date.parse(p[0])-start)/Math.max(end-start,1)*710;
   const y=p=>max===min?65:104-(p[1]-min)/(max-min)*88;
-  const line=points.map((p,i)=>(i?(step?'H'+x(p)+'V':'L'+x(p)+' '):'M'+x(p)+' ')+y(p)).join(' ');
+  const segments=points.slice(1).map((p,i)=>{
+    const a=points[i],segment='M'+x(a)+' '+y(a)+(step?'H'+x(p)+'V':'L'+x(p)+' ')+y(p);
+    return '<path class="'+directionClass(p[1]-a[1])+'" d="'+segment+'" fill="none" stroke="currentColor" stroke-width="3"/>';
+  }).join('');
   return '<svg class="series-plot" viewBox="0 0 800 140" role="img" aria-label="'+esc(label)+'"><title>'+esc(label)+'</title>'+
     [0,.5,1].map(t=>'<path d="M68 '+(16+88*t)+'H778" stroke="#dce5e6"/><text x="1" y="'+(20+88*t)+'">'+fmt(max-(max-min)*t,2)+'</text>').join('')+
-    '<path d="'+line+'" fill="none" stroke="#12766b" stroke-width="3"/><circle cx="'+x(points.at(-1))+'" cy="'+y(points.at(-1))+'" r="4" fill="#12766b"/>'+
+    segments+'<circle class="'+directionClass(points.length>1?points.at(-1)[1]-points.at(-2)[1]:null)+'" cx="'+x(points.at(-1))+'" cy="'+y(points.at(-1))+'" r="4" fill="currentColor"/>'+
     points.map(p=>'<circle cx="'+x(p)+'" cy="'+y(p)+'" r="4" fill="transparent"><title>'+dt(p[0])+' · '+fmt(p[1])+' '+esc(unit)+'</title></circle>').join('')+
     '<text x="68" y="132">'+dt(points[0][0])+'</text><text x="778" y="132" text-anchor="end">'+dt(points.at(-1)[0])+'</text></svg>';
 }
@@ -68,7 +71,7 @@ function newsFeed(m){
 function ticker(rows, liveTimes={}) {
   const el=$('marketTape');
   if (!rows.length) {el.hidden=true;return;}
-  const part=rows.map(s=>'<span><b>'+esc(s.board?s.label:s.code==='KEY'?'Ключевая ставка':s.code)+'</b> '+fmt(s.value)+' '+esc(s.unit)+' <small>'+esc(changeText(s))+' · '+dt(s.day,false)+(liveTimes[s.code]?' '+esc(liveTimes[s.code])+' МСК':'')+'</small></span>').join('');
+  const part=rows.map(s=>'<span><b>'+esc(s.board?s.label:s.code==='KEY'?'Ключевая ставка':s.code)+'</b> '+fmt(s.value)+' '+esc(s.unit)+' <small><span class="'+directionClass(s.previous==null?null:s.value-s.previous)+'">'+esc(changeText(s))+'</span> · '+dt(s.day,false)+(liveTimes[s.code]?' '+esc(liveTimes[s.code])+' МСК':'')+'</small></span>').join('');
   el.hidden=false;
   el.querySelector('.tape-track').innerHTML='<div>'+part+'</div><div aria-hidden="true">'+part+'</div>';
 }
@@ -117,15 +120,15 @@ async function extendChart(item){
     if(!rows){
       rows=[];
       for(let offset=0; ;){
-        const j=await official(path,{from:item.start,till:end,start:offset,'iss.only':'history,history.cursor','history.columns':'TRADEDATE,CLOSE,VALUE,NUMTRADES,YIELDCLOSE,ACCINT,COUPONVALUE,COUPONPERCENT,CURRENCYID,FACEUNIT'});
-        const block=issRows(j.history);rows.push(...block);offset+=block.length;
+        const j=await official(path,{from:item.start,till:end,start:offset,'iss.only':'history,history.cursor','history.columns':'TRADEDATE,OPEN,HIGH,LOW,CLOSE,VALUE,VOLUME,NUMTRADES,YIELDCLOSE,ACCINT,COUPONVALUE,COUPONPERCENT,CURRENCYID,FACEUNIT,TRADINGSESSION'});
+        const block=issRows(j.history);rows.push(...block.filter(r=>r.TRADINGSESSION==null||r.TRADINGSESSION===3));offset+=block.length;
         if(!block.length||offset>=(j['history.cursor']?.data[0]?.[1]??offset))break;
       }
       chartCache.set(key,rows);
     }
     if(data!==item||!rows.length)return;
     const all=new Map(item.quotes.map(r=>[r.day,r]));
-    for(const r of rows){if(r.TRADEDATE<=end && r.NUMTRADES>0 && Number.isFinite(r.CLOSE))all.set(r.TRADEDATE,{day:r.TRADEDATE,price:r.CLOSE,volume:r.VALUE,trades:r.NUMTRADES,yield_close:r.YIELDCLOSE,currency:r.CURRENCYID,board:item.board});}
+    for(const r of rows){if(r.TRADEDATE<=end && r.NUMTRADES>0 && Number.isFinite(r.CLOSE))all.set(r.TRADEDATE,{day:r.TRADEDATE,price:r.CLOSE,open:r.OPEN,high:r.HIGH,low:r.LOW,quantity:r.VOLUME,volume:r.VALUE,trades:r.NUMTRADES,yield_close:r.YIELDCLOSE,currency:r.CURRENCYID,board:item.board});}
     item.quotes=[...all.values()].sort((a,b)=>a.day.localeCompare(b.day));
     const observed=rows.filter(r=>r.TRADEDATE<=end && r.ACCINT!=null).at(-1);
     if(observed&&(!item.terms||observed.TRADEDATE>item.terms.seen.slice(0,10))){
@@ -153,7 +156,7 @@ function radarPanel(r){
   const factors=r.factors.slice(0,6).map(f=>'<li><b>'+esc(f.scope)+'</b> · '+esc(f.reason)+' '+link(f.url,dt(f.day))+'</li>').join('');
   return '<section id="bondRadar" class="panel radar-panel level-'+esc(r.level)+'"><div class="section-head"><div><small>Кредитный риск выпуска</small><h2><span class="signal-dot"></span>'+esc(r.label)+'</h2></div><small>Оценка на '+dt(r.asof)+'</small></div><p>'+(r.due?'Ближайший известный платёж — '+dt(r.due)+'.':'Срок ближайшего платежа в архиве отсутствует.')+'</p>'+
     (factors?'<ul>'+factors+'</ul>':'')+(r.gaps.length?'<p class="sub">'+r.gaps.map(esc).join(' ')+'</p>':'')+
-    '<details><summary>Как определяется цвет</summary><p>Красный означает зарегистрированный дефолт этой бумаги без подтверждения исполнения на дату проверки. Жёлтый означает технический дефолт, недавнюю просрочку, нарушение по другой бумаге эмитента, финансовый или ценовой сигнал. Зелёный требует свежей проверки реестра, своевременной выплаты, доступного прогноза и полного набора проверенных финансовых показателей без предупреждений. Серый означает недостаток данных для вывода. Цвет представляет экспертную категорию наблюдения. Численная вероятность дефолта не рассчитана.</p></details></section>';
+    '<details><summary>Как определяется цвет</summary><p>Скринер и карточка используют общую категорию. Высокий индекс или подтверждённый открытый дефолт выпуска дают красный цвет. Предупреждение модели ближайшего платежа, финансовый фактор, юридическое событие или недавняя просрочка дают как минимум жёлтый. Для зелёного нужны низкий индекс и подтверждение своевременной выплаты. При частичной оценке без предупреждений цвет серый. Прогноз ближайшего платежа рассчитывается отдельно.</p>'+((r.assessment||[]).map(t=>'<p>'+esc(t)+'</p>').join(''))+'</details></section>';
 }
 function filingPanel(item){
   const groups=[
@@ -183,11 +186,21 @@ function defaultEvidence(item){
   return '<section class="panel" id="defaultEvidence"><h3>Платёжные нарушения по документам</h3>'+text+
     '<p class="sub">Статус относится к указанному обязательству.</p><details><summary>Как радар устанавливает нарушение</summary><p>Для выпуска сопоставляются вид платежа, договорный срок и раскрытие об исполнении. Если в реестре Мосбиржи есть запись, карточка воспроизводит её формулировку: «Технический дефолт» или «Дефолт». Позднейшее исполнение показывается отдельной датой. Отсутствие публикации оставляет исход неизвестным.</p><p>Финансовые коэффициенты и динамика цены помогают оценивать риск будущего платежа. Численная вероятность дефолта в этой версии не рассчитывается.</p></details></section>';
 }
+function paymentJournal(item){
+  const rows=item.payment_journal||[];
+  if(!rows.length)return '';
+  const evidence=rows.map(r=>{
+    const status=r.entry==='plan'?'План':r.late?(r.actual?'Исполнено после срока':'Просрочка подтверждена'):'Исполнено в срок';
+    const unit=r.per_unit==null?'':fmt(r.per_unit)+' '+cashCurrency(r.currency);
+    return '<tr><td>'+dt(r.day)+'</td><td>'+esc(r.kind)+'</td><td>'+dt(r.due)+'</td><td>'+esc(status)+'</td><td>'+esc(unit||'—')+'</td><td>'+esc(r.actual?dt(r.actual):'—')+'</td><td>'+link(r.url,'Источник')+'</td></tr>';
+  }).join('');
+  return '<section class="panel"><details id="paymentJournal"><summary>Журнал наблюдений по выплатам</summary><div class="tablewrap"><table><thead><tr><th>День наблюдения</th><th>Обязательство</th><th>Срок</th><th>Сведения</th><th>На бумагу</th><th>Дата исполнения</th><th>Основание</th></tr></thead><tbody>'+evidence+'</tbody></table></div></details></section>';
+}
 function financialPanel(reports,selectedPeriod){
   if(!reports.length)return '<section class="panel" id="fundamentals"><h3>Финансовое состояние эмитента</h3><p class="sub">На выбранную дату отсутствуют проверенные числовые показатели по этому ИНН. Доступные публикации приведены в разделе «Документы кредитного анализа».</p></section>';
-  const r=reports.find(v=>v.period+'|'+v.standard===selectedPeriod)||reports[0],priority=['interest_cover','net_leverage','ocf','fcf','net_income','roe'];
+  const r=reports.find(v=>v.period+'|'+v.standard===selectedPeriod)||reports[0],priority=['current_ratio','cash_cover','interest_cover','working_capital','short_debt_share','net_leverage','ocf','fcf','net_income','roe'];
   const rows=Object.entries(r.metrics);
-  const metrics=priority.filter(k=>r.metrics[k]).slice(0,4).map(k=>r.metrics[k]);
+  const metrics=priority.filter(k=>r.metrics[k]).slice(0,7).map(k=>r.metrics[k]);
   const key=['ocf','net_income','revenue'].find(k=>r.metrics[k]);
   const fiscalEnd=period=>period.length===4?period+'-12-31':period.endsWith('H1')?period.slice(0,4)+'-06-30':period.endsWith('M9')?period.slice(0,4)+'-09-30':period.slice(0,4)+['-03-31','-06-30','-09-30','-12-31'][Number(period.at(-1))-1];
   const history=key?reports.filter(x=>x.period.length===r.period.length&&x.standard===r.standard&&x.metrics[key]?.unit===r.metrics[key].unit&&x.period<=r.period).sort((a,b)=>a.period.localeCompare(b.period)).map(x=>[fiscalEnd(x.period),x.metrics[key].value]):[];

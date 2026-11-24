@@ -22,6 +22,8 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS reports(issuer TEXT,period TEXT,standard TEXT,published TEXT,ticker TEXT,url TEXT,
  original TEXT,metrics TEXT,PRIMARY KEY(issuer,period,standard));
 CREATE INDEX IF NOT EXISTS reports_issuer ON reports(issuer,published);
+CREATE TABLE IF NOT EXISTS report_editions(issuer TEXT,period TEXT,standard TEXT,published TEXT,ticker TEXT,
+ url TEXT,original TEXT,metrics TEXT,observed TEXT,PRIMARY KEY(issuer,period,standard,observed));
 CREATE TABLE IF NOT EXISTS series(code TEXT,day TEXT,value REAL,label TEXT,unit TEXT,url TEXT,PRIMARY KEY(code,day));
 CREATE TABLE IF NOT EXISTS curve(day TEXT,years REAL,yield_pct REAL,PRIMARY KEY(day,years));
 CREATE TABLE IF NOT EXISTS corporate_yields(code TEXT,day TEXT,yield_pct REAL,duration_days INTEGER,PRIMARY KEY(code,day));
@@ -30,6 +32,8 @@ CREATE TABLE IF NOT EXISTS terms(bond TEXT,seen TEXT,board TEXT,settle TEXT,accr
 CREATE TABLE IF NOT EXISTS headlines(published TEXT,url TEXT PRIMARY KEY,title TEXT);
 CREATE TABLE IF NOT EXISTS daily(secid TEXT,board TEXT,day TEXT,price REAL,volume REAL,trades INTEGER,
   yield_close REAL,PRIMARY KEY(secid,board,day));
+CREATE TABLE IF NOT EXISTS sessions(secid TEXT,board TEXT,day TEXT,open REAL,high REAL,low REAL,
+  quantity REAL,currency TEXT,PRIMARY KEY(secid,board,day));
 CREATE TABLE IF NOT EXISTS issue_type(secid TEXT,seen TEXT,code TEXT,PRIMARY KEY(secid,seen));
 CREATE TABLE IF NOT EXISTS issuer_sector(inn TEXT,day TEXT,sector TEXT,url TEXT,PRIMARY KEY(inn,day,sector));
 CREATE TABLE IF NOT EXISTS bond_yields(secid TEXT,board TEXT,day TEXT,ytm REAL,duration REAL,
@@ -87,11 +91,24 @@ def report_rows(content, ticker, issuer, url):
     return results
 
 
+def store_reports(db,batch):
+    stamp=now()
+    for row in batch:
+        key=row[:3]
+        previous=db.execute("SELECT published,url,original,metrics FROM report_editions WHERE issuer=? AND period=? AND standard=? ORDER BY observed DESC LIMIT 1",key).fetchone()
+        if previous is None:
+            previous=db.execute("SELECT published,url,original,metrics FROM reports WHERE issuer=? AND period=? AND standard=?",key).fetchone()
+        if previous is None:
+            db.execute("INSERT INTO reports VALUES(?,?,?,?,?,?,?,?)",row)
+        elif tuple(previous[:3])!=tuple(row[i] for i in (3,5,6)) or json.loads(previous[3])!=json.loads(row[7]):
+            db.execute("INSERT OR REPLACE INTO report_editions VALUES(?,?,?,?,?,?,?,?,?)",(*row,stamp))
+
+
 def fundamentals(db):
     directory = fetch("https://smart-lab.ru/q/shares_fundamental/").decode()
     symbols = set(re.findall(r'/q/([\w.\-]+)/f/y/',directory))
     with connect() as catalog:
-        issuers = {r[0] for r in catalog.execute("SELECT DISTINCT issuer FROM bonds")}
+        issuers = {r[0] for r in catalog.execute("SELECT DISTINCT issuer FROM bonds WHERE traded=1")}
     mapping={"RZHD":"7708503727","GAZP":"7736050003","SBER":"7707083893","GMKN":"8401005730",
              "SIBN":"5504036333","SMLT":"9731004688","SGZH":"9703024202","POSI":"9718077239",
              "PHOR":"7736216869","EUTR":"5029169023","LKOH":"7708004767"}
@@ -111,7 +128,7 @@ def fundamentals(db):
     with ThreadPoolExecutor(4) as pool:
         for symbol,inn in pool.map(resolve_ticker,sorted(symbols-mapping.keys())):
             if inn:mapping[symbol]=inn
-    picked = {}
+    picked = {inn:ticker for inn,ticker in db.execute("SELECT DISTINCT issuer,ticker FROM reports WHERE ticker<>''") if inn in issuers}
     for ticker in sorted(symbols, key=lambda key:(len(key),key)):
         inn = mapping.get(ticker)
         if inn in issuers:
@@ -127,12 +144,14 @@ def fundamentals(db):
     with ThreadPoolExecutor(max_workers=4) as pool:
         for batch in pool.map(collect,picked.items()):
             with db:
-                db.executemany("INSERT OR REPLACE INTO reports VALUES(?,?,?,?,?,?,?,?)",batch)
+                store_reports(db,batch)
     print("Mapped", len(picked), "issuers. Financial observations:", db.execute("SELECT count(*) FROM reports").fetchone()[0])
 
 
 def quarters(db):
-    items=db.execute("SELECT DISTINCT issuer,ticker FROM reports").fetchall()
+    with connect() as catalog:
+        active={r[0] for r in catalog.execute("SELECT DISTINCT issuer FROM bonds WHERE traded=1")}
+    items=[r for r in db.execute("SELECT DISTINCT issuer,ticker FROM reports WHERE ticker<>''") if r[0] in active]
     def collect(item):
         inn,ticker=item
         url=f"https://smart-lab.ru/q/{quote(ticker)}/f/q/"
@@ -140,7 +159,7 @@ def quarters(db):
         except (OSError,UnicodeError):return []
     with ThreadPoolExecutor(4) as pool:
         for batch in pool.map(collect,items):
-            with db:db.executemany("INSERT OR REPLACE INTO reports VALUES(?,?,?,?,?,?,?,?)",batch)
+            with db:store_reports(db,batch)
     print("Quarterly reports:",db.execute("SELECT count(*) FROM reports WHERE period LIKE '%Q%'").fetchone()[0])
 
 
@@ -302,17 +321,26 @@ def bond_yields(db):
         print("Доходность и дюрация",day,len(batch),flush=True)
 
 
+def save_sessions(db,batch):
+    with db:
+        db.executemany("INSERT OR REPLACE INTO daily VALUES(?,?,?,?,?,?,?)",
+            ((r["SECID"],r["BOARDID"],r["TRADEDATE"],r["CLOSE"],r["VALUE"],r["NUMTRADES"],r.get("YIELDCLOSE")) for r in batch))
+        db.executemany("INSERT OR REPLACE INTO sessions VALUES(?,?,?,?,?,?,?,?)",
+            ((r["SECID"],r["BOARDID"],r["TRADEDATE"],r.get("OPEN"),r.get("HIGH"),r.get("LOW"),r.get("VOLUME"),r.get("CURRENCYID")) for r in batch))
+
+
 def history(db, days=8):
     end=date.today()-timedelta(days=1)
-    existing={r[0] for r in db.execute("SELECT DISTINCT day FROM daily")}
+    db.execute("CREATE TABLE IF NOT EXISTS session_downloads(day TEXT PRIMARY KEY)")
+    existing={r[0] for r in db.execute("SELECT day FROM session_downloads")}
     dates=[end-timedelta(days=n) for n in range(days)]
     def get(day):
         path="history/engines/stock/markets/bonds/securities"
-        args={"date":day.isoformat(),"history.columns":"SECID,BOARDID,TRADEDATE,CLOSE,VALUE,NUMTRADES,YIELDCLOSE"}
+        args={"date":day.isoformat(),"history.columns":"SECID,BOARDID,TRADEDATE,OPEN,HIGH,LOW,CLOSE,VALUE,VOLUME,CURRENCYID,NUMTRADES,YIELDCLOSE,TRADINGSESSION"}
         result=[]
         for r in pages(path,"history",**args):
-            if r["BOARDID"] in ("TQCB","TQOB","TQOD","TQIR","TQOY") and r["NUMTRADES"] and r["CLOSE"] is not None:
-                result.append((r["SECID"],r["BOARDID"],r["TRADEDATE"],r["CLOSE"],r["VALUE"],r["NUMTRADES"],r.get("YIELDCLOSE")))
+            if r.get("TRADINGSESSION") in (None,3) and r["BOARDID"] in ("TQCB","TQOB","TQOD","TQIR","TQOY") and r["NUMTRADES"] and r["CLOSE"] is not None:
+                result.append(r)
         return result
     with ThreadPoolExecutor(4) as pool:
         work={day:pool.submit(get,day) for day in dates if day.isoformat() not in existing}
@@ -320,7 +348,8 @@ def history(db, days=8):
             try: batch=future.result()
             except (OSError, ValueError) as exc:
                 print("MOEX history",day,type(exc).__name__,flush=True); continue
-            with db:db.executemany("INSERT OR REPLACE INTO daily VALUES(?,?,?,?,?,?,?)",batch)
+            save_sessions(db,batch)
+            with db:db.execute("INSERT OR IGNORE INTO session_downloads VALUES(?)",(day.isoformat(),))
             print("MOEX history",day,len(batch),flush=True)
 
 

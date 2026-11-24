@@ -25,3 +25,11 @@
 [data-theme=dark] .card-title .badge.amber{background:#493a24;color:#ffdb94}
 [data-theme=dark] .card-title .badge.green{background:#1d4339;color:#a1efd2}
 @media(prefers-reduced-motion:reduce){.working .orb,.tape-track{animation:none!important}}
+
+.trade-up{color:#22855b}.trade-down{color:#b44648}.trade-flat{color:#707d8b}
+[data-theme=dark] .trade-up{color:#50cc94}[data-theme=dark] .trade-down{color:#ff8587}[data-theme=dark] .trade-flat{color:#a9b5c3}
+.trade-chart .ohlc path,.trade-chart .close-segment{stroke:currentColor;stroke-width:1.6;fill:none}
+.trade-chart .ohlc rect,.trade-chart .trade-volume,.trade-chart .close-dot{fill:currentColor}
+.trade-chart .trade-volume{opacity:.7}.trade-grid{stroke:currentColor;opacity:.22;fill:none}
+.trade-chart .trade-hit{fill:transparent;cursor:crosshair}.trade-hit:hover,.trade-hit:focus{fill:currentColor;fill-opacity:.12}
+.trade-chart{height:auto;max-height:none;width:100%}#price .seg button[aria-pressed=true]{box-shadow:inset 0 -2px currentColor}

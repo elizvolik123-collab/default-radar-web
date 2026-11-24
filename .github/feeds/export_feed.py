@@ -20,9 +20,12 @@ def export(out):
         available={r[0] for r in facts.execute("SELECT DISTINCT issuer FROM reports")}
         available.update(r[0] for r in facts.execute("SELECT DISTINCT issuer FROM filings WHERE removed=0"))
         directory=[]
+        active={r[0] for r in catalog.execute("SELECT DISTINCT issuer FROM bonds WHERE traded=1")}
         for inn,name in catalog.execute("SELECT id,name FROM issuers ORDER BY id"):
             relative="fundamentals/"+inn+".json" if inn in available and inn.isdigit() else None
+            reports=issuer_reports(inn,at) if relative else []
             if relative:
-                write(root/relative,{"issuer":inn,"name":name,"asof":at[:10],"reports":issuer_reports(inn,at),"filings":issuer_filings(inn,at)})
-            directory.append({"issuer":inn,"name":name,"report":relative})
+                write(root/relative,{"issuer":inn,"name":name,"asof":at[:10],"reports":reports,"filings":issuer_filings(inn,at)})
+            directory.append({"issuer":inn,"name":name,"report":relative,"active":inn in active,
+                              "latest_statement":reports[0]["published"] if reports else None})
         write(root/"issuers.json",{"date":at[:10],"issuers":directory})

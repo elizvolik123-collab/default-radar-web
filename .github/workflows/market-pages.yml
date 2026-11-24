@@ -4,14 +4,14 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    - cron: '25 19 * * 1-5'
+    - cron: '25 19 * * *'
 concurrency:
   group: bond-radar-pages
   cancel-in-progress: false
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 95
     permissions:
       contents: read
     steps:
@@ -19,6 +19,7 @@ jobs:
       - name: Prepare site and data
         env:
           EVENT: ${{ github.event_name }}
+          INTERFAX_API_KEY: ${{ secrets.INTERFAX_API_KEY }}
         run: |
           if [ "$EVENT" = schedule ] || [ "$EVENT" = workflow_dispatch ]; then
             python3 .github/feeds/refresh_site.py --refresh
