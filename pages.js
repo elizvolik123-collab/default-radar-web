@@ -4,7 +4,8 @@
   const pending = new Map();
   let nextId=0, failure='';
   const endpoint=document.querySelector('meta[name="radar-chat-url"]')?.content;
-  const mode=()=>endpoint?'Серверная языковая модель · ответы по источникам':'Встроенный поиск по документам и показателям · без регистрации';
+  const groq=document.querySelector('meta[name="radar-groq-url"]')?.content;
+  const mode=()=>endpoint?'Серверная языковая модель · ответы по источникам':groq?'Groq · GPT-OSS · ответы по источникам':'Встроенный поиск по документам и показателям · без регистрации';
 
   worker.onmessage = ({data}) => {
     const job = pending.get(data.id);
@@ -30,7 +31,7 @@
     const id = ++nextId;
     return new Promise((resolve, reject) => {
       pending.set(id, {resolve, reject});
-      worker.postMessage({id, url, body});
+      worker.postMessage({id, url, body,groq_endpoint:!endpoint && url==='/api/chat' && body?.mode!=='demo'?groq:null});
     });
   }};
 })();
