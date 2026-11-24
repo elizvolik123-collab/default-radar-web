@@ -14,9 +14,8 @@ from storage import ROOT, MSK, connect, now
 from sync import MOEX_TLS, fetch, iss, pages, records
 
 
-INDICES = {"IMOEX": "Индекс Мосбиржи", "RGBI": "ОФЗ · чистые цены",
-           "RGBITR": "ОФЗ · совокупный доход", "RUCBTRNS": "Корпоративные облигации · совокупный доход"}
-from credit_data import LABELS
+from credit_data import LABELS, INDICES, CURVE_URL
+from disclosure_feed import SCHEMA as FILING_SCHEMA, gateway
 FIELDS = set(LABELS)
 DATABASE = ROOT / "data/market.sqlite3"
 SCHEMA = """
@@ -24,6 +23,8 @@ CREATE TABLE IF NOT EXISTS reports(issuer TEXT,period TEXT,standard TEXT,publish
  original TEXT,metrics TEXT,PRIMARY KEY(issuer,period,standard));
 CREATE INDEX IF NOT EXISTS reports_issuer ON reports(issuer,published);
 CREATE TABLE IF NOT EXISTS series(code TEXT,day TEXT,value REAL,label TEXT,unit TEXT,url TEXT,PRIMARY KEY(code,day));
+CREATE TABLE IF NOT EXISTS curve(day TEXT,years REAL,yield_pct REAL,PRIMARY KEY(day,years));
+CREATE TABLE IF NOT EXISTS corporate_yields(code TEXT,day TEXT,yield_pct REAL,duration_days INTEGER,PRIMARY KEY(code,day));
 CREATE TABLE IF NOT EXISTS terms(bond TEXT,seen TEXT,board TEXT,settle TEXT,accrued REAL,coupon REAL,
  rate REAL,due TEXT,period INTEGER,currency TEXT,source TEXT,PRIMARY KEY(bond,seen));
 CREATE TABLE IF NOT EXISTS headlines(published TEXT,url TEXT PRIMARY KEY,title TEXT);
@@ -141,16 +142,62 @@ def quarters(db):
 
 def indices(db):
     start = date.today()-timedelta(days=730)
-    for code,label in INDICES.items():
+    def load(item):
+        code,label=item
         path = f"engines/stock/markets/index/securities/{code}/candles"
         rows = pages(path,"candles",interval=24,**{"from":start.isoformat(),"till":date.today().isoformat()})
         batch = [(code,r["begin"][:10],r["close"],label,"п.",f"https://www.moex.com/ru/index/{code}")
                  for r in rows if r["close"] is not None]
         if not batch:
             raise ValueError("Нет истории для "+code)
-        with db:
-            db.executemany("INSERT OR REPLACE INTO series VALUES(?,?,?,?,?,?)",batch)
-        print(code,len(batch),batch[-1][1],flush=True)
+        return batch
+    failures=[]
+    with ThreadPoolExecutor(3) as pool:
+        jobs={code:pool.submit(load,(code,label)) for code,label in INDICES.items()}
+        for code,job in jobs.items():
+            try:batch=job.result()
+            except (OSError, ValueError) as exc:
+                failures.append(code);print(code,str(exc),flush=True);continue
+            with db:db.executemany("INSERT OR REPLACE INTO series VALUES(?,?,?,?,?,?)",batch)
+            print(code,len(batch),batch[-1][1],flush=True)
+    if failures:raise ValueError("Не получены индексы "+", ".join(failures))
+
+
+def curve_rows(raw):
+    rows=re.findall(r"<tr\b[^>]*>(.*?)</tr>",raw,re.I|re.S)
+    tenors=[]
+    for row in rows:
+        cells=[plain(v) for v in re.findall(r"<t[hd]\b[^>]*>(.*?)</t[hd]>",row,re.I|re.S)]
+        if len(cells)>2 and all(re.fullmatch(r"\d+(?:[.,]\d+)?",v) for v in cells):
+            tenors=[float(v.replace(",",".")) for v in cells]
+        if tenors and len(cells)==len(tenors)+1 and re.fullmatch(r"\d{2}\.\d{2}\.\d{4}",cells[0]):
+            stamp=datetime.strptime(cells[0],"%d.%m.%Y").date().isoformat()
+            for term,value in zip(tenors,cells[1:]):
+                if re.fullmatch(r"-?\d+(?:[.,]\d+)?",value):
+                    yield stamp,term,float(value.replace(",","."))
+
+
+def curve(db):
+    last=db.execute("SELECT max(day) FROM curve").fetchone()[0]
+    start=date.fromisoformat(last)-timedelta(days=7) if last else date.today()-timedelta(days=730)
+    url=CURVE_URL+"?UniDbQuery.Posted=True&UniDbQuery.From="+start.strftime("%d.%m.%Y")+"&UniDbQuery.To="+date.today().strftime("%d.%m.%Y")
+    batch=list(curve_rows(fetch(url).decode("utf-8")))
+    if not batch:raise ValueError("Банк России не вернул узлы КБД")
+    with db:db.executemany("INSERT OR REPLACE INTO curve VALUES(?,?,?)",batch)
+    print("КБД",len(batch),"узлов",max(r[0] for r in batch),flush=True)
+
+
+def corporate_yields(db):
+    for code in ("RUCBTRNS","RUCBTRAAANS"):
+        prior=db.execute("SELECT max(day) FROM corporate_yields WHERE code=?",(code,)).fetchone()[0]
+        start=date.fromisoformat(prior)-timedelta(days=8) if prior else date.today()-timedelta(days=730)
+        path=f"history/engines/stock/markets/index/boards/RTSI/securities/{code}"
+        rows=pages(path,"history",**{"from":str(start),"till":str(date.today())})
+        batch=[(code,r["TRADEDATE"],r["YIELD"],r["DURATION"]) for r in rows
+               if r.get("YIELD") is not None and r.get("DURATION") and str(r.get("TRADINGSESSION")) in ("3","None")]
+        if not batch:raise ValueError("Нет данных о доходности "+code)
+        with db:db.executemany("INSERT OR REPLACE INTO corporate_yields VALUES(?,?,?,?)",batch)
+        print(code,"доходность и дюрация",len(batch),flush=True)
 
 
 def key_rate(db):
@@ -233,12 +280,12 @@ def history(db, days=8):
 
 
 if __name__=="__main__":
-    commands={"fundamentals":fundamentals,"quarters":quarters,"indices":indices,"rate":key_rate,"terms":bond_terms,"news":telegram,"history":history}
+    commands={"fundamentals":fundamentals,"quarters":quarters,"indices":indices,"curve":curve,"yields":corporate_yields,"disclosures":gateway,"rate":key_rate,"terms":bond_terms,"news":telegram,"history":history}
     parser=argparse.ArgumentParser()
     parser.add_argument("sections",nargs="*",choices=list(commands))
     args=parser.parse_args()
     with sqlite3.connect(DATABASE,timeout=60) as conn:
-        conn.executescript(SCHEMA)
+        conn.executescript(SCHEMA+FILING_SCHEMA)
         failed=[]
         for section in args.sections or commands:
             try:commands[section](conn)

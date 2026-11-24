@@ -1,5 +1,6 @@
 'use strict';
 let activeMacro = 'RGBI', marketWindow = 90, macroRows = [];
+let macroSnapshot;
 const macroCache = new Map();
 function seriesPlot(points, label, unit, step=false) {
   if (!points.length) return '<p class="empty">Наблюдения за выбранный период отсутствуют.</p>';
@@ -19,6 +20,7 @@ function changeText(s) {
   return (delta>0?'+':'')+fmt(delta)+(s.code==='KEY'?' п. п.':'%');
 }
 function marketDashboard(m) {
+  macroSnapshot=m;
   macroRows=m.series;
   const row=m.series.find(s=>s.code===activeMacro)||m.series[0];
   if (!row) return '<section class="panel"><h2>Рыночные индикаторы</h2><p>За выбранную дату данные отсутствуют.</p></section>';
@@ -26,14 +28,37 @@ function marketDashboard(m) {
   return '<section class="panel macro" id="macroPanel"><h2>Рыночные индикаторы</h2><div class="macro-grid">'+m.series.map(s=>
     '<button class="macro-card '+(s.code===row.code?'selected':'')+'" data-index="'+esc(s.code)+'" aria-pressed="'+(s.code===row.code)+'"><small>'+esc(s.label)+'</small><strong>'+fmt(s.value)+' '+esc(s.unit)+'</strong><span>'+esc(changeText(s))+' · '+dt(s.day,false)+'</span></button>').join('')+
     '</div><div class="section-head"><div><h3>'+esc(row.label)+'</h3><span class="minor">'+esc(row.code)+' · '+esc(row.unit)+'</span></div><div class="seg">'+[30,90,365,730].map(n=>'<button data-market-days="'+n+'" class="'+(n===marketWindow?'sel':'')+'">'+(n>=365?(n/365)+' г':n+' д')+'</button>').join('')+'</div></div>'+
-    seriesPlot(points,row.label,row.unit,row.code==='KEY')+'<div class="sourcebar">'+link(row.url,row.code==='KEY'?'Банк России':'ПАО Московская Биржа')+'<span>Данные на '+dt(row.day)+'</span></div></section>';
+    seriesPlot(points,row.label,row.unit,row.code==='KEY')+'<p class="sub">'+esc(indexMeaning[row.code]||'')+'</p><div class="sourcebar">'+link(row.url,row.code==='KEY'?'Банк России':'ПАО Московская Биржа')+'<span>Данные на '+dt(row.day)+'</span></div>'+curvePanel(m.curve)+corporatePanel(m.corporate)+'</section>';
+}
+function corporatePanel(rows){
+  if(!rows?.length)return '';
+  return '<section class="corporate-rates"><h3>Доходность корпоративного долга</h3><div class="tablewrap"><table><thead><tr><th>Портфель</th><th>Доходность</th><th>Дюрация</th><th>Премия к КБД</th></tr></thead><tbody>'+rows.map(s=>'<tr><td>'+link(s.url,s.code)+'<small>'+dt(s.day)+'</small></td><td>'+fmt(s.yield_pct)+'%</td><td>'+fmt(s.duration_days,0)+' дн.</td><td>'+(s.premium_bp==null?'Нет сопоставимой КБД':link(s.curve_url,fmt(s.premium_bp,0)+' б. п.'))+'</td></tr>').join('')+'</tbody></table></div><p class="sub">Ориентировочная премия равна разности доходности индекса и бескупонной ставки ОФЗ на ту же дату. Ставка определяется линейной интерполяцией на срок дюрации. На премию влияют кредитный риск и ликвидность.</p></section>';
+}
+const indexMeaning={
+  RGBI:'Динамика чистых цен ОФЗ отражает изменение рыночной стоимости государственного долга.',
+  RUCBCPNS:'Динамика чистых цен корпоративных бумаг позволяет выделить ценовую составляющую результата инвестора.',
+  RUCBTRNS:'Совокупный доход корпоративного портфеля включает изменение цен и реинвестирование купонных выплат.',
+  RUCBTRAAANS:'Индекс сегмента AAA позволяет сопоставить динамику наиболее высокорейтинговых выпусков с широким корпоративным портфелем. На расхождение влияют также дюрация и состав выпусков.',
+  KEY:'Ключевая ставка Банка России служит ориентиром стоимости краткосрочных денег в рублях.',
+  IMOEX:'Индекс акций отражает состояние российского рынка долевого капитала.'
+};
+function curvePanel(curve){
+  if(!curve?.points?.length)return '<div id="yieldCurve"><h3>Кривая бескупонной доходности ОФЗ</h3><p class="sub">Данные на выбранную дату отсутствуют.</p></div>';
+  const points=curve.points, yields=points.map(p=>p[1]);
+  const lo=Math.floor(Math.min(...yields)),hi=Math.max(lo+1,Math.ceil(Math.max(...yields)));
+  const x=t=>60+t/30*686,y=v=>116-(v-lo)/(hi-lo)*94;
+  const line=points.map(([t,v],i)=>(i?'L':'M')+x(t)+' '+y(v)).join(' ');
+  const grid=[lo,(lo+hi)/2,hi].map(v=>'<path d="M60 '+y(v)+'H746" stroke="#dce5e6"/><text x="0" y="'+(y(v)+4)+'">'+fmt(v)+'%</text>').join('');
+  const ticks=[0,5,10,15,20,25,30].map(v=>'<text x="'+x(v)+'" y="143" text-anchor="middle">'+v+'</text>').join('');
+  const nodes=points.map(([t,v])=>'<circle cx="'+x(t)+'" cy="'+y(v)+'" r="3.6" fill="#286d68"><title>'+fmt(t)+' г. · '+fmt(v)+'%</title></circle>').join('');
+  return '<section id="yieldCurve"><div class="section-head"><h3>Кривая бескупонной доходности ОФЗ</h3><small>КБД · '+dt(curve.day)+'</small></div><p class="sub">Доходность, % годовых</p><svg class="series-plot" viewBox="0 0 770 150" role="img" aria-label="Кривая доходности по срокам до погашения">'+grid+'<path d="'+line+'" fill="none" stroke="#286d68" stroke-width="3"/>'+nodes+ticks+'</svg><p class="axis-caption">Срок до погашения, лет</p><details><summary>Значения по срокам</summary><div class="curve-values">'+points.map(([t,v])=>'<span>'+fmt(t)+' г. <b>'+fmt(v)+'%</b></span>').join('')+'</div></details><div class="sourcebar">'+link(curve.url,'Банк России · узлы кривой')+'</div></section>';
 }
 document.addEventListener('click',e=>{
   const btn=e.target.closest('[data-index],[data-market-days]');
   if(!btn||!$('macroPanel'))return;
   if(btn.dataset.index)activeMacro=btn.dataset.index;
   if(btn.dataset.marketDays)marketWindow=Number(btn.dataset.marketDays);
-  $('macroPanel').outerHTML=marketDashboard({series:macroRows});
+  $('macroPanel').outerHTML=marketDashboard(macroSnapshot);
 });
 function newsFeed(m){
   return '<section class="panel"><div class="section-head"><h2>Новости рынка</h2>'+link('https://t.me/markettwits','MarketTwits')+'</div>'+
@@ -67,7 +92,7 @@ async function refreshTape(snapshotRows) {
   const times={};
   try {
     const codes=rows.filter(s=>s.code!=='KEY'&&!s.board).map(s=>s.code);
-    const m=await official('engines/stock/markets/index/boards/SNDX/securities',{securities:codes.join(','),'iss.only':'marketdata','marketdata.columns':'SECID,CURRENTVALUE,LASTVALUE,TRADEDATE,UPDATETIME'});
+    const m=await official('engines/stock/markets/index/securities',{securities:codes.join(','),'iss.only':'marketdata','marketdata.columns':'SECID,CURRENTVALUE,LASTVALUE,TRADEDATE,UPDATETIME'});
     const market=issRows(m.marketdata);
     const updated=rows.map(s=>{
       const q=market.find(r=>r.SECID===s.code&&r.TRADEDATE===marketDay&&Number.isFinite(r.CURRENTVALUE));
@@ -119,6 +144,32 @@ function couponPanel(item){
     ['Купонный период',t?.period?fmt(t.period)+' дн.':'Нет данных','По условиям выпуска']];
   return '<section class="panel" id="coupons"><h3>НКД и купонные выплаты</h3><div class="metrics">'+boxes.map(([k,v,sub])=>'<div><small>'+k+'</small><strong>'+v+'</strong><small>'+sub+'</small></div>').join('')+'</div><div class="sourcebar">'+link(t?.source||plan?.source||item.bond.source,'Московская биржа')+'<span>'+ (t?'Снимок '+dt(t.seen)+' · '+esc(t.board):'Параметры НКД на этот срез не опубликованы')+'</span></div></section>';
 }
+function radarPanel(r){
+  if(!r)return '';
+  const factors=r.factors.slice(0,6).map(f=>'<li><b>'+esc(f.scope)+'</b> · '+esc(f.reason)+' '+link(f.url,dt(f.day))+'</li>').join('');
+  return '<section id="bondRadar" class="panel radar-panel level-'+esc(r.level)+'"><div class="section-head"><div><small>Кредитный риск выпуска</small><h2><span class="signal-dot"></span>'+esc(r.label)+'</h2></div><small>Оценка на '+dt(r.asof)+'</small></div><p>'+(r.due?'Ближайший известный платёж — '+dt(r.due)+'.':'Срок ближайшего платежа в архиве отсутствует.')+'</p>'+
+    (factors?'<ul>'+factors+'</ul>':'')+(r.gaps.length?'<p class="sub">'+r.gaps.map(esc).join(' ')+'</p>':'')+
+    '<details><summary>Как определяется цвет</summary><p>Красный означает зарегистрированный дефолт этой бумаги без подтверждения исполнения на дату проверки. Жёлтый означает технический дефолт, недавнюю просрочку, нарушение по другой бумаге эмитента, финансовый или ценовой сигнал. Зелёный требует свежей проверки реестра, своевременной выплаты, доступного прогноза и полного набора проверенных финансовых показателей без предупреждений. Серый означает недостаток данных для вывода. Цвет представляет экспертную категорию наблюдения. Численная вероятность дефолта не рассчитана.</p></details></section>';
+}
+function filingPanel(item){
+  const groups=[
+    ['Условия обязательства','Решение о выпуске, проспект, оферта и действующие изменения определяют сумму, срок, обеспечение и условия нарушения.',[]],
+    ['Исполнение обязательства','Сообщение эмитента или ПВО, подтверждение выплаты и биржевой реестр позволяют сопоставить установленную и фактическую даты.',[]],
+    ['Финансовое состояние','Отчётность РСБУ и МСФО, аудиторское заключение и отчёт эмитента дают основания для анализа ликвидности и долга.',[]],
+    ['Изменение прав кредиторов','Решения ОСВО, сообщения ПВО, условия реструктуризации и судебные акты помогают проверить изменение срока и порядок взыскания.',[]]
+  ];
+  const add=(i,title,stamp,url)=>{if(url&&!groups[i][2].some(d=>d.url===url))groups[i][2].push({title,stamp,url});};
+  if(item.next)add(0,'График ближайшего платежа',item.next.known,item.next.source);
+  for(const r of item.registry)add(1,r.status+' · '+r.kind+' · срок '+dt(r.due),r.observed,r.url);
+  for(const o of item.outcomes)add(1,o.source+' · '+o.kind+' · срок '+dt(o.due),o.published,o.url);
+  for(const f of item.filings){
+    const text=f.category+' '+f.title;
+    const group=/отч[её]т|аудит/i.test(text)?2:/проспект|условия выпуска|эмиссионн/i.test(text)?0:/просроч|неисполн|выплачен/i.test(text)?1:3;
+    add(group,f.title+(f.period?' · '+f.period:''),f.published,f.url);
+  }
+  for(const f of item.financials)add(2,f.standard+' · '+f.period,f.published,f.original||f.url);
+  return '<section class="panel" id="creditDocuments"><h3>Документы кредитного анализа</h3>'+groups.map(([name,purpose,docs])=>'<details><summary>'+esc(name)+' · '+docs.length+'</summary><p class="sub">'+esc(purpose)+'</p>'+(docs.length?docs.sort((a,b)=>b.stamp.localeCompare(a.stamp)).map(d=>'<div class="docrow"><small>'+dt(d.stamp)+'</small>'+link(d.url,d.title)+'</div>').join(''):'<p class="sub">Подтверждающий документ в этой группе на дату анализа отсутствует.</p>')+'</details>').join('')+'</section>';
+}
 function defaultEvidence(item){
   const r=item.registry?.[0], missed=item.outcomes?.find(p=>p.late);
   const text=r?'<strong>'+esc(r.status)+'</strong><p>'+esc(r.kind)+' · срок обязательства '+dt(r.due)+
@@ -128,32 +179,19 @@ function defaultEvidence(item){
   return '<section class="panel" id="defaultEvidence"><h3>Платёжные нарушения по документам</h3>'+text+
     '<p class="sub">Статус относится к указанному обязательству.</p><details><summary>Как радар устанавливает нарушение</summary><p>Для выпуска сопоставляются вид платежа, договорный срок и раскрытие об исполнении. Если в реестре Мосбиржи есть запись, карточка воспроизводит её формулировку: «Технический дефолт» или «Дефолт». Позднейшее исполнение показывается отдельной датой. Отсутствие публикации оставляет исход неизвестным.</p><p>Финансовые коэффициенты и динамика цены помогают оценивать риск будущего платежа. Численная вероятность дефолта в этой версии не рассчитывается.</p></details></section>';
 }
-async function copyForChatGPT(){
-  const list=chats.get(chatKey())||[];
-  const question=$('question').value.trim()||list.filter(m=>m.user).at(-1)?.user;
-  if(!question){$('gptStatus').textContent='Введите вопрос или выберите выпуск и задайте вопрос в чате.';return;}
-  const answer=await api('/api/chat',{...state,question,history:list.filter(m=>m.user).slice(-4).map(m=>m.user)});
-  const refs=answer.refs||[];
-  const material=['Дата анализа: '+state.date,'Вопрос: '+question,
-    data?'Выбранный выпуск: '+data.bond.name+' ('+data.bond.id+')':'',
-    'Сведения радара: '+answer.text,...refs.map((r,i)=>(i+1)+'. '+r.label+' — '+r.url),
-    'Ответь на русском языке в аналитическом стиле. Подтверди цифры ссылками, укажи дату сведений и отдельно обозначь выводы, для которых данных недостаточно.'].filter(Boolean).join('\n\n');
-  try {await navigator.clipboard.writeText(material);$('gptStatus').textContent='Вопрос и источники скопированы. Откройте ChatGPT и вставьте текст.';}
-  catch {modal('Материалы для ChatGPT','<textarea readonly rows="12" style="width:100%">'+esc(material)+'</textarea>');}
-}
 function financialPanel(reports,selectedPeriod){
-  if(!reports.length)return '<section class="panel" id="fundamentals"><h3>Финансовое состояние эмитента</h3><p class="sub">На выбранную дату нет сопоставленной отчётности Smart-Lab по этому ИНН. Финансовые коэффициенты не рассчитаны.</p></section>';
-  const r=reports.find(v=>v.period===selectedPeriod)||reports[0],priority=['interest_cover','net_leverage','ocf','fcf','net_income','roe'];
+  if(!reports.length)return '<section class="panel" id="fundamentals"><h3>Финансовое состояние эмитента</h3><p class="sub">На выбранную дату отсутствуют проверенные числовые показатели по этому ИНН. Доступные публикации приведены в разделе «Документы кредитного анализа».</p></section>';
+  const r=reports.find(v=>v.period+'|'+v.standard===selectedPeriod)||reports[0],priority=['interest_cover','net_leverage','ocf','fcf','net_income','roe'];
   const rows=Object.entries(r.metrics);
   const metrics=priority.filter(k=>r.metrics[k]).slice(0,4).map(k=>r.metrics[k]);
   const key=['ocf','net_income','revenue'].find(k=>r.metrics[k]);
-  const fiscalEnd=period=>period.length===4?period+'-12-31':period.slice(0,4)+['-03-31','-06-30','-09-30','-12-31'][Number(period.at(-1))-1];
+  const fiscalEnd=period=>period.length===4?period+'-12-31':period.endsWith('H1')?period.slice(0,4)+'-06-30':period.endsWith('M9')?period.slice(0,4)+'-09-30':period.slice(0,4)+['-03-31','-06-30','-09-30','-12-31'][Number(period.at(-1))-1];
   const history=key?reports.filter(x=>x.period.length===r.period.length&&x.standard===r.standard&&x.metrics[key]?.unit===r.metrics[key].unit&&x.period<=r.period).sort((a,b)=>a.period.localeCompare(b.period)).map(x=>[fiscalEnd(x.period),x.metrics[key].value]):[];
-  const options=reports.map(x=>'<option value="'+esc(x.period)+'" '+(x.period===r.period?'selected':'')+'>'+esc(x.period)+' · '+esc(x.standard)+'</option>').join('');
+  const options=reports.map(x=>'<option value="'+esc(x.period+'|'+x.standard)+'" '+(x.period===r.period&&x.standard===r.standard?'selected':'')+'>'+esc(x.period)+' · '+esc(x.standard)+'</option>').join('');
   return '<section class="panel" id="fundamentals"><div class="section-head"><h3>Финансовое состояние эмитента</h3><span class="badge">'+esc(r.standard)+' · '+esc(r.period)+'</span></div><label class="minor">Отчётный период <select id="statementPeriod">'+options+'</select></label><p class="sub">Опубликован '+dt(r.published)+'</p><div class="metrics">'+metrics.map(m=>'<div><small>'+esc(m.name)+'</small><strong>'+fmt(m.value)+' '+esc(m.unit)+'</strong></div>').join('')+'</div><h4>Факторы финансового риска</h4>'+
     (r.flags.length?'<ul>'+r.flags.map(f=>'<li>'+esc(f.text)+' <strong>'+fmt(r.metrics[f.key].value)+' '+esc(r.metrics[f.key].unit)+'</strong></li>').join('')+'</ul>':'<p class="sub">По доступным показателям заданные условия предупреждения не выполнены.</p>')+
     (history.length>1?'<h4>'+esc(r.metrics[key].name)+' · '+esc(r.metrics[key].unit)+'</h4>'+seriesPlot(history,r.metrics[key].name,r.metrics[key].unit):'')+
-    '<details><summary>Показатели отчётности и коэффициенты ('+rows.length+')</summary><div class="tablewrap"><table><tbody>'+rows.map(([,m])=>'<tr><td>'+esc(m.name)+'</td><td>'+fmt(m.value,3)+' '+esc(m.unit)+'</td></tr>').join('')+'</tbody></table></div></details><div class="sourcebar">'+link(r.url,'Smart-Lab · финансовые показатели')+(r.original?link(r.original,'Отчёт эмитента'):'')+'</div></section>';
+    '<details><summary>Показатели отчётности и коэффициенты ('+rows.length+')</summary><div class="tablewrap"><table><tbody>'+rows.map(([,m])=>'<tr><td>'+esc(m.name)+'</td><td>'+fmt(m.value,3)+' '+esc(m.unit)+'</td></tr>').join('')+'</tbody></table></div></details><div class="sourcebar">'+link(r.url,r.provider+' · финансовые показатели')+(r.original&&r.original!==r.url?link(r.original,'Отчёт эмитента'):'')+'</div></section>';
 }
 
 document.addEventListener('change',event=>{if(event.target.id==='statementPeriod'&&data)$('fundamentals').outerHTML=financialPanel(data.financials,event.target.value);});

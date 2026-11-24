@@ -13,10 +13,10 @@ from pathlib import Path
 PUBLIC="https://elizvolik123-collab.github.io/default-radar-web/"
 
 
-def merge_previous(path, previous):
+def merge_previous(path, previous,names):
     with closing(sqlite3.connect(path)) as db:
         db.execute("ATTACH DATABASE ? AS prior",(str(previous),))
-        for name in ("terms","series","reports","headlines","daily"):
+        for name in names:
             dest=[r[1] for r in db.execute(f"PRAGMA main.table_info({name})")]
             src={r[1] for r in db.execute(f"PRAGMA prior.table_info({name})")}
             cols=",".join(k for k in dest if k in src)
@@ -41,7 +41,7 @@ def run():
             for name in members:
                 if Path(name).is_absolute() or ".." in Path(name).parts:raise ValueError("Unexpected archive path")
                 source.extract(name,work)
-        for name in ("collect_market.py","sync.py","export_feed.py"):
+        for name in ("collect_market.py","disclosure_feed.py","statement_reader.py","sync.py","export_feed.py"):
             shutil.copy2(tools/name,work/name)
         shutil.copy2(tools/"moex-root.pem",work/"data/moex-root.pem")
         if "--refresh" in sys.argv:
@@ -52,8 +52,13 @@ def run():
                 with zipfile.ZipFile(temp) as source:
                     previous=work/"prior.sqlite3"
                     previous.write_bytes(source.read("data/market.sqlite3"))
-                merge_previous(work/"data/market.sqlite3",previous)
-            sections=["rate","terms","news","indices","history"]
+                    prior_catalog=work/"prior_catalog.sqlite3"
+                    prior_catalog.write_bytes(source.read("data/radar.sqlite3"))
+                merge_previous(work/"data/market.sqlite3",previous,("terms","series","reports","headlines","daily","curve","corporate_yields","filings","filing_numbers"))
+                merge_previous(work/"data/radar.sqlite3",prior_catalog,("moex_defaults","registry_checks"))
+            defaults=subprocess.run([sys.executable,"-u","sync.py","defaults"],cwd=work)
+            if defaults.returncode:print("::warning::Реестр дефолтов не обновлён.")
+            sections=["curve","yields","rate","terms","news","indices","history"]
             if datetime.now(timezone.utc).weekday()==0:sections+=["fundamentals","quarters"]
             outcome=subprocess.run([sys.executable,"-u","collect_market.py",*sections],cwd=work)
             if outcome.returncode:

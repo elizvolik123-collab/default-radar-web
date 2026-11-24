@@ -212,6 +212,7 @@ def defaults(db):
         return json.loads(fetch(endpoint+"?"+params,headers))
     result=page(0)
     batch=list(result["list"])
+    if not batch:raise ValueError("Получен пустой реестр дефолтов")
     seen={r["id"] for r in batch}
     page_no=1
     while batch:

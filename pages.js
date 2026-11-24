@@ -2,9 +2,9 @@
 (() => {
   const worker = new Worker('worker.js');
   const pending = new Map();
-  let nextId=0, failure='', access='';
+  let nextId=0, failure='';
   const endpoint=document.querySelector('meta[name="radar-chat-url"]')?.content;
-  const mode=()=>endpoint?'GPT · серверный разбор по источникам':'Поиск по документам и финансовым данным. GPT API для сайта пока не подключён.';
+  const mode=()=>endpoint?'Серверная языковая модель · ответы по источникам':'Встроенный поиск по документам и показателям · без регистрации';
 
   worker.onmessage = ({data}) => {
     const job = pending.get(data.id);
@@ -21,14 +21,10 @@
   window.pagesRadar = {mode, async request(url, body) {
     if (failure) throw Error(failure);
     if(body && url==='/api/chat' && endpoint){
-      if(!access) access=window.prompt('Введите код доступа к GPT этого радара')||'';
-      if(access){
-        const r=await fetch(endpoint,{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json','X-Radar':'1','X-Radar-Access':access},body:JSON.stringify(body),signal:AbortSignal.timeout(140000)});
-        const result=await r.json();
-        if(r.status===403)access='';
-        if(!r.ok)throw Error(result.error||'Сервер GPT недоступен');
-        return result;
-      }
+      try{
+        const r=await fetch(endpoint,{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json','X-Radar':'1'},body:JSON.stringify(body),signal:AbortSignal.timeout(140000)});
+        if(r.ok){const result=await r.json();if(result.mode!=='Модель временно недоступна')return result;}
+      }catch{/* The dated archive can still answer inside the site. */}
     }
     const id = ++nextId;
     return new Promise((resolve, reject) => {

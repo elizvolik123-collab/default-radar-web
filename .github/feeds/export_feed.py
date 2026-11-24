@@ -3,7 +3,7 @@ import json
 from contextlib import closing
 from pathlib import Path
 
-from credit_data import issuer_reports, market, open_data
+from credit_data import issuer_reports, issuer_filings, market, open_data
 from storage import connect, now
 
 
@@ -18,10 +18,11 @@ def export(out):
     write(root/"macro.json",{"asof":at[:10],**market(at)})
     with closing(open_data()) as facts, closing(connect()) as catalog:
         available={r[0] for r in facts.execute("SELECT DISTINCT issuer FROM reports")}
+        available.update(r[0] for r in facts.execute("SELECT DISTINCT issuer FROM filings WHERE removed=0"))
         directory=[]
         for inn,name in catalog.execute("SELECT id,name FROM issuers ORDER BY id"):
             relative="fundamentals/"+inn+".json" if inn in available and inn.isdigit() else None
             if relative:
-                write(root/relative,{"issuer":inn,"name":name,"asof":at[:10],"reports":issuer_reports(inn,at)})
+                write(root/relative,{"issuer":inn,"name":name,"asof":at[:10],"reports":issuer_reports(inn,at),"filings":issuer_filings(inn,at)})
             directory.append({"issuer":inn,"name":name,"report":relative})
         write(root/"issuers.json",{"date":at[:10],"issuers":directory})
