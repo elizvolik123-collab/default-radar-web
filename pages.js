@@ -9,6 +9,7 @@
   worker.onmessage = ({data}) => {
     const job = pending.get(data.id);
     if (!job) return;
+    if(data.stage){agentStage(data.stage,true);return;}
     pending.delete(data.id);
     if (data.error) job.reject(Error(data.error));
     else job.resolve(data.result);
@@ -20,7 +21,7 @@
   };
   window.pagesRadar = {mode, async request(url, body) {
     if (failure) throw Error(failure);
-    if(body && url==='/api/chat' && endpoint){
+    if(body && url==='/api/chat' && body.mode!=='demo' && endpoint){
       try{
         const r=await fetch(endpoint,{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json','X-Radar':'1'},body:JSON.stringify(body),signal:AbortSignal.timeout(140000)});
         if(r.ok){const result=await r.json();if(result.mode!=='Модель временно недоступна')return result;}

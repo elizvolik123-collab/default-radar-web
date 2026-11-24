@@ -30,6 +30,10 @@ CREATE TABLE IF NOT EXISTS terms(bond TEXT,seen TEXT,board TEXT,settle TEXT,accr
 CREATE TABLE IF NOT EXISTS headlines(published TEXT,url TEXT PRIMARY KEY,title TEXT);
 CREATE TABLE IF NOT EXISTS daily(secid TEXT,board TEXT,day TEXT,price REAL,volume REAL,trades INTEGER,
   yield_close REAL,PRIMARY KEY(secid,board,day));
+CREATE TABLE IF NOT EXISTS issue_type(secid TEXT,seen TEXT,code TEXT,PRIMARY KEY(secid,seen));
+CREATE TABLE IF NOT EXISTS issuer_sector(inn TEXT,day TEXT,sector TEXT,url TEXT,PRIMARY KEY(inn,day,sector));
+CREATE TABLE IF NOT EXISTS bond_yields(secid TEXT,board TEXT,day TEXT,ytm REAL,duration REAL,
+ zspread REAL,PRIMARY KEY(secid,board,day));
 """
 
 
@@ -257,6 +261,47 @@ def telegram(db):
     print("MarketTwits",len(batch),flush=True)
 
 
+def issuer_sectors(db):
+    codes={"MOEXOG":"Нефть и газ","MOEXMM":"Металлы и добыча","MOEXFN":"Финансовый сектор",
+           "MOEXTN":"Транспорт","MOEXCN":"Потребительский сектор","MOEXEU":"Электроэнергетика",
+           "MOEXTL":"Телекоммуникации","MOEXCH":"Химия и нефтехимия","MOEXIT":"Информационные технологии"}
+    day=db.execute("SELECT max(day) FROM series WHERE code='IMOEX' AND day<?",(now()[:10],)).fetchone()[0]
+    if not day:raise ValueError("Не найдена дата завершённой сессии")
+    equities=pages("securities","securities",group_by="group",group_by_filter="stock_shares",
+                   **{"securities.columns":"secid,emitent_inn,group"})
+    owners={r["secid"]:str(r["emitent_inn"]) for r in equities if r.get("emitent_inn") and r.get("group")=="stock_shares"}
+    for code,sector in codes.items():
+        path=f"statistics/engines/stock/markets/index/analytics/{code}"
+        rows=pages(path,"analytics",date=day)
+        url="https://iss.moex.com/iss/"+path+".json?date="+day
+        items={(owners[r["ticker"]],day,sector,url) for r in rows if r.get("ticker") in owners and r.get("tradedate")==day}
+        with db:db.executemany("INSERT OR IGNORE INTO issuer_sector VALUES(?,?,?,?)",items)
+        print(code,len(items),flush=True)
+
+
+def issue_types(db):
+    stamp=now()
+    rows=pages("securities","securities",group_by="group",group_by_filter="stock_bonds",
+               **{"securities.columns":"secid,type,group"})
+    batch=[(r["secid"],stamp,r["type"]) for r in rows if r.get("group")=="stock_bonds" and r.get("type")]
+    if not batch:raise ValueError("ISS не вернул типы выпусков")
+    with db:db.executemany("INSERT OR IGNORE INTO issue_type VALUES(?,?,?)",batch)
+    print("Типы выпусков ISS",len(batch),flush=True)
+
+
+def bond_yields(db):
+    path="history/engines/stock/markets/bonds/boards/TQCB/securities"
+    # Revisit completed sessions so exchange corrections can be incorporated.
+    for (day,) in db.execute("SELECT DISTINCT day FROM daily WHERE board='TQCB' ORDER BY day DESC LIMIT 5").fetchall():
+        rows=pages(path,"history",date=day,**{"history.columns":"SECID,TRADINGSESSION,FACEUNIT,COUPON_DETAILS,DURATION,YIELDCLOSE,ZSPREAD,NUMTRADES"})
+        batch=[(r["SECID"],"TQCB",day,r["YIELDCLOSE"],r["DURATION"],r["ZSPREAD"]) for r in rows
+               if r["TRADINGSESSION"] in (3,None) and r["FACEUNIT"] in ("SUR","RUR","RUB")
+               and r["NUMTRADES"] and (r["COUPON_DETAILS"] or "").startswith("Фиксированный")
+               and r["YIELDCLOSE"] is not None and r["DURATION"] and r["DURATION"]>0]
+        with db:db.executemany("INSERT OR REPLACE INTO bond_yields VALUES(?,?,?,?,?,?)",batch)
+        print("Доходность и дюрация",day,len(batch),flush=True)
+
+
 def history(db, days=8):
     end=date.today()-timedelta(days=1)
     existing={r[0] for r in db.execute("SELECT DISTINCT day FROM daily")}
@@ -281,6 +326,7 @@ def history(db, days=8):
 
 if __name__=="__main__":
     commands={"fundamentals":fundamentals,"quarters":quarters,"indices":indices,"curve":curve,"yields":corporate_yields,"disclosures":gateway,"rate":key_rate,"terms":bond_terms,"news":telegram,"history":history}
+    commands.update(types=issue_types,spreads=bond_yields,sectors=issuer_sectors)
     parser=argparse.ArgumentParser()
     parser.add_argument("sections",nargs="*",choices=list(commands))
     args=parser.parse_args()

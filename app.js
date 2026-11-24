@@ -12,11 +12,11 @@ const paths = {chart:'<path d="M3 3v17h18M6 14l4-5 4 3 5-7"/>',chat:'<path d="M4
 const icon = k=>'<span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true">'+(paths[k]||'')+'</svg></span>';
 document.querySelectorAll('[data-i]').forEach(e=>e.innerHTML=icon(e.dataset.i));
 const marketDay=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Moscow'}).format(new Date());
-const initial={id:'',date:marketDay,tab:'market',period:30,horizon:90,week:'',event:'',point:'',section:'detail',time:'',board:'',specific:'',unit:'rub'};
-function readState(){const p=new URLSearchParams(location.search);return Object.fromEntries(Object.entries(initial).map(([k,v])=>[k,p.get(k)||v]));}
+const initial={mode:'live',id:'',date:marketDay,tab:'market',period:30,horizon:90,week:'',event:'',point:'',section:'detail',time:'',board:'',specific:'',unit:'rub'};
+function readState(){const p=new URLSearchParams(location.search);const view=Object.fromEntries(Object.entries(initial).map(([k,v])=>[k,p.get(k)||v]));if(view.mode==='demo'&&!p.has('date'))view.date='2026-11-24';return view;}
 let state=readState(), data=null, stats=null, seq=0, searchSeq=0, offset=0, timer, loadingChat=false;
 const chats=new Map();
-const chatKey=()=>[state.id,state.date,state.time].join('|');
+const chatKey=()=>[state.mode,state.id,state.date,state.time].join('|');
 const params=()=>new URLSearchParams(Object.entries(state).filter(([,v])=>v!=='' && v!=null));
 function save(push=false){const url='?'+params();if(location.search!==url)history[push?'pushState':'replaceState']({},'',url);}
 async function api(url,body){if(window.pagesRadar)return window.pagesRadar.request(url,body);const r=await fetch(url,body?{method:'POST',headers:{'Content-Type':'application/json','X-Radar':'1'},body:JSON.stringify(body)}:{});const d=await r.json();if(!r.ok)throw Error(d.error||'Сервер недоступен');return d;}
@@ -32,10 +32,10 @@ function tabs(){
   document.querySelectorAll('[data-tab]').forEach(b=>{b.classList.toggle('active',b.dataset.tab===state.tab);b.setAttribute('aria-pressed',b.dataset.tab===state.tab);});
   $('pageTitle').textContent=chat?'Спросить агента':'Рынок облигаций';
   $('subtitle').textContent=chat?'Разбор выпуска с опорой на первоисточники':'Выпуски, платежи и кредитные события';
-  $('asof').value=state.date;
+  $('asof').value=state.date;$('workMode').value=state.mode;
 }
 async function load(push=false){
-  const token=++seq;save(push);tabs();notice('');
+  const token=++seq;save(push);tabs();notice(''); if($('screen').open)refreshScreen();
   $('marketHome').innerHTML='';
   if(!state.id){
     data=null;$('detail').innerHTML='';renderChat();
@@ -82,8 +82,7 @@ function sourceModal(){
   modal('Источники и покрытие','<p class="meta">Последний сохранённый набор. Счётчики охватывают все даты.</p><div class="metrics">'+[['Выпуски',stats.bonds],['С котировками',stats.quotes],['С календарём',stats.plans],['С подтверждёнными исходами',stats.outcome_bonds]].map(([k,v])=>'<div><small>'+k+'</small><strong>'+fmt(v)+'</strong></div>').join('')+'</div><p class="meta">Реестр дефолтов MOEX: '+fmt(stats.registry_records)+' записей. Связано с каталогом выпусков: '+fmt(stats.registry_bonds)+'.</p><h3 class="act">Обновления по источникам</h3>'+logs+'<p class="meta">ISS и RSS биржи обновляются командой загрузки. Исторические релизы агентств и эмитентов отобраны вручную. Telegram представлен ссылками на публикации. История платежей использует сообщения эмитентов в АК&amp;М, уведомления ПВО и реестр биржи. Финансовая отчётность и судебная история в прогноз пока не входят.</p>');
 }
 function timeline(){
-  if(state.id!==MAIN)return '';
-  return '<div class="timeline"><strong>Исторические срезы</strong>'+presets.map(v=>'<button data-date="'+v+'" class="'+(state.date===v?'sel':'')+'">'+dt(v,false)+'</button>').join('')+(state.date==='2026-04-08'?'<label class="minor">Время МСК <input aria-label="Время среза" type="time" id="clock" value="'+esc(state.time||'23:59')+'"></label>':'')+'</div>';
+  return '<div class="timeline"><strong>Исторический срез</strong>'+(state.id===MAIN?presets:[]).map(v=>'<button data-date="'+v+'" class="'+(state.date===v?'sel':'')+'">'+dt(v,false)+'</button>').join('')+('<label class="minor">Время МСК <input aria-label="Время среза" type="time" id="clock" value="'+esc(state.time||'')+'"></label>')+'</div>';
 }
 function statusLabel(){const recent=data.registry?.[0],outcome=data.outcomes?.[0];if(outcome&&(!data.payment||outcome.due>data.payment.date)&&(!recent||outcome.due>recent.due))return [(outcome.late?'Просрочка':'Выплата в срок')+' · '+dt(outcome.due,false),outcome.late?'red':'green'];if(recent && (!data.payment||recent.due>data.payment.date))return [recent.status+' · '+dt(recent.due,false),'red'];if(data.payment)return [data.payment.status,data.payment.status.includes('опозданием')?'amber':'green'];const ev=data.events.find(x=>x.kind==='Просрочка');return ev?['Нарушение срока','amber']:data.events.some(x=>x.kind==='Рейтинг')?['Есть рейтинговый сигнал','amber']:['Исполнение не подтверждено',''];}
 function overview(){
@@ -120,7 +119,7 @@ function chartPrice(){
 }
 function price(){
   const url=data.board?'https://iss.moex.com/iss/history/engines/stock/markets/bonds/boards/'+encodeURIComponent(data.board)+'/securities/'+encodeURIComponent(data.bond.secid)+'.json?from='+data.start+'&till='+state.date:data.bond.source;
-  return '<article class="panel focus-section" id="price"><div class="section-head"><h3>Цена и объём торгов</h3><div class="seg">'+[14,30,90,365].map(n=>'<button data-period="'+n+'" class="'+(+state.period===n?'sel':'')+'">'+(n===365?'1 г':n+' д')+'</button>').join('')+'</div></div>'+chartPrice()+(data.boards.length>1?'<label class="minor">Режим торгов <select id="boardSelect">'+data.boards.map(v=>'<option '+(v===data.board?'selected':'')+'>'+esc(v)+'</option>').join('')+'</select></label>':'')+'<div class="sourcebar">'+link(url,'MOEX ISS'+(data.board?' · '+data.board:''))+'<button class="textbtn" data-ask="price">Объяснить в чате →</button></div></article>';
+  return '<article class="panel focus-section" id="price"><div class="section-head"><h3>Цена и объём торгов</h3><div class="seg">'+[7,14,30,90,180,365,36500].map(n=>'<button data-period="'+n+'" class="'+(+state.period===n?'sel':'')+'">'+(n===36500?'Вся история':n===365?'1 г':n+' д')+'</button>').join('')+'</div></div>'+chartPrice()+(data.boards.length>1?'<label class="minor">Режим торгов <select id="boardSelect">'+data.boards.map(v=>'<option '+(v===data.board?'selected':'')+'>'+esc(v)+'</option>').join('')+'</select></label>':'')+'<div class="sourcebar">'+link(url,'MOEX ISS'+(data.board?' · '+data.board:''))+'<button class="textbtn" data-ask="price">Объяснить в чате →</button></div></article>';
 }
 const types={'Купон':'#399989','Амортизация':'#7b92bb','Погашение':'#d5a357','Оферта':'#ac8ca7'};
 function calendar(){
@@ -140,7 +139,7 @@ function calendar(){
   }
   const selected=state.week?plans.filter(p=>p.date>=state.week&&p.date<dtadd(state.week,7)):null;
   let table=selected?'<div class="inset"><b>Неделя с '+dt(state.week)+'</b>'+(selected.length?selected.map(p=>'<div class="lineitem '+(p.bond===state.id?'highlight':'')+'"><div><strong>'+esc(p.name)+'</strong><div class="minor">'+dt(p.date,false)+' · '+esc(p.label)+(p.bond===state.id?' · выбранный выпуск':'')+'</div></div><div>'+esc(p.amount==null?'Неизвестно':fmt(p.amount)+' '+cashCurrency(p.currency))+'<br>'+link(p.source,'График')+'</div></div>').join(''):'<p>В сохранённом календаре нет записей на эту неделю.</p>')+'</div>':'';
-  return '<article class="panel focus-section" id="calendar"><div class="section-head"><h3>Выплаты эмитента</h3><div class="seg">'+[30,90].map(n=>'<button data-horizon="'+n+'" class="'+(+state.horizon===n?'sel':'')+'">'+(n===365?'1 г':n+' д')+'</button>').join('')+'</div></div><p class="sub">'+dt(state.date,false)+' — '+dt(dtadd(state.date,days-1))+'</p>'+(charts||'<p class="empty">В выбранном интервале нет опубликованного графика для этого эмитента.</p>')+(plans.length?'<div class="legend">'+[...new Set(plans.map(p=>p.kind))].map(k=>'<span><b class="dot" style="background:'+types[k]+'"></b>'+esc(k)+'</span>').join('')+'</div><p class="sub">¹ Только известные суммы. Выберите неделю для состава выплат.</p>':'')+table+'<details class="sub"><summary>Охват обязательств</summary>В окне доступны графики по '+new Set(plans.map(p=>p.bond)).size+' вып. Оферты и купоны с неизвестной суммой показаны в составе недели. Сроки банковских кредитов не загружены.</details><div class="sourcebar"><span>Условия выпусков и MOEX ISS</span><button class="textbtn" data-ask="calendar">Объяснить в чате →</button></div></article>';
+  return '<article class="panel focus-section" id="calendar"><div class="section-head"><h3>Выплаты эмитента</h3><div class="seg">'+[30,90].map(n=>'<button data-horizon="'+n+'" class="'+(+state.horizon===n?'sel':'')+'">'+(n===36500?'Вся история':n===365?'1 г':n+' д')+'</button>').join('')+'</div></div><p class="sub">'+dt(state.date,false)+' — '+dt(dtadd(state.date,days-1))+'</p>'+(charts||'<p class="empty">В выбранном интервале нет опубликованного графика для этого эмитента.</p>')+(plans.length?'<div class="legend">'+[...new Set(plans.map(p=>p.kind))].map(k=>'<span><b class="dot" style="background:'+types[k]+'"></b>'+esc(k)+'</span>').join('')+'</div><p class="sub">¹ Только известные суммы. Выберите неделю для состава выплат.</p>':'')+table+'<details class="sub"><summary>Охват обязательств</summary>В окне доступны графики по '+new Set(plans.map(p=>p.bond)).size+' вып. Оферты и купоны с неизвестной суммой показаны в составе недели. Сроки банковских кредитов не загружены.</details><div class="sourcebar"><span>Условия выпусков и MOEX ISS</span><button class="textbtn" data-ask="calendar">Объяснить в чате →</button></div></article>';
 }
 function payment(){
   const p=data.payment, percent=state.unit==='pct';
@@ -171,7 +170,7 @@ function news(){
 function render(){
   if(!data)return;
   const list='<section class="panel"><div class="section-head"><h3>Другие выпуски эмитента</h3><button class="textbtn" data-action="search">Весь каталог →</button></div><div class="tablewrap"><table><thead><tr><th>Выпуск</th><th>ISIN</th><th>Последняя сохранённая сделка</th></tr></thead><tbody>'+data.shortlist.map(b=>'<tr><td><button data-bond="'+esc(b.id)+'">'+esc(b.name)+'</button></td><td class="mono">'+esc(b.isin)+'</td><td>'+dt(b.last_trade)+'</td></tr>').join('')+'</tbody></table></div></section>';
-  $('detail').innerHTML='<button class="textbtn" data-action="home">← Обзор рынка</button>'+timeline()+overview()+radarPanel(data.radar)+defaultEvidence(data)+couponPanel(data)+forecastPanel(data.forecast)+financialPanel(data.financials||[])+filingPanel(data)+'<div class="grid">'+price()+calendar()+'</div><div class="charts-more">'+payment()+documents()+'</div>'+outcomeList()+riskPanel()+news()+(data.shortlist.length?list:'');
+  $('detail').innerHTML='<button class="textbtn" data-action="home">← Обзор рынка</button>'+timeline()+overview()+expertPanel(data)+radarPanel(data.radar)+defaultEvidence(data)+couponPanel(data)+forecastPanel(data.forecast)+financialPanel(data.financials||[])+filingPanel(data)+'<div class="grid">'+price()+calendar()+'</div><div class="charts-more">'+payment()+documents()+'</div>'+outcomeList()+riskPanel()+news()+extraAnalytics(data)+(data.shortlist.length?list:'');
   renderChat();
 }
 function docModal(id){const d=data.documents.find(x=>x.id===id);if(!d)return;state.event=id;save();modal(d.title,'<p class="meta">'+esc(d.publisher)+' · '+esc(d.kind)+'</p><p class="modalbody">'+esc(d.body)+'</p><div class="doclist"><div class="lineitem"><span>Дата события</span>'+dt(d.occurred)+'</div><div class="lineitem"><span>Опубликовано</span>'+dt(d.published)+(d.published.includes('T')?' '+esc(d.published.slice(11,16))+' МСК':' · время не указано')+'</div><div class="lineitem"><span>Сохранено</span>'+dt(d.loaded)+'</div></div><div class="drawer-actions">'+link(d.url,'Открыть первоисточник','lightbtn')+(id==='ncr'?'<a class="lightbtn" href="documents/nkr-20260407.pdf" target="_blank" rel="noopener">Сохранённый PDF ↗</a>':'')+'<button class="primary" data-ask="doc">Объяснить в чате</button></div>');}
@@ -180,7 +179,7 @@ function renderChat(){
   $('chatContext').innerHTML=data?'<div class="panel chat-context"><div><div class="cap">В контексте</div><strong>'+esc(data.bond.name)+'</strong><div class="mono">'+esc(state.id)+' · '+dt(state.date)+(state.time?' '+esc(state.time):'')+(state.week?' · неделя с '+dt(state.week,false):'')+(state.point?' · сделка '+dt(state.point,false):'')+'</div></div><button class="textbtn" data-return="'+esc(state.section)+'">К аналитике →</button></div>':'';
   const msgs=chats.get(chatKey())||[];
   $('dialogue').innerHTML=msgs.length?msgs.map((m,index)=>messageHtml(m,index)).join(''):'<div class="chat-intro"><img src="favicon.svg" alt=""><h2>Какой выпуск или показатель вас интересует?</h2><p>Назовите выпуск или компанию. Можно продолжить разбор открытой карточки.</p><div class="chips">'+['Какова динамика цены закрытия ОФЗ 26207?','Что известно о выплатах RU000A10DK80?',(state.id?'Когда ближайший купон выбранного выпуска?':'Когда предусмотрена следующая купонная выплата по облигациям Сбербанка?')].map(q=>'<button data-prompt="'+esc(q)+'">'+esc(q)+'</button>').join('')+'</div></div>';
-  $('mode').textContent=window.pagesRadar?window.pagesRadar.mode():stats?.model?(stats.provider==='local'?'Модель на этом компьютере · ':'Серверная модель · ')+stats.model_name+' · ответы по первоисточникам':'Архивный режим. Локальная модель или API не подключены.';
+  $('mode').textContent=state.mode==='demo'?'Демонстрационный архив · поиск по документам и показателям':window.pagesRadar?window.pagesRadar.mode():stats?.model?(stats.provider==='local'?'Модель на этом компьютере · ':'Серверная модель · ')+stats.model_name+' · ответы по первоисточникам':'Архивный режим. Локальная модель или API не подключены.';
 
 }
 function messageHtml(m,index){
@@ -209,15 +208,15 @@ async function ask(q,choiceId=''){
   if(loadingChat||!q.trim()||(state.id&&!data))return;
   const key=chatKey(),list=chats.get(key)||[];chats.set(key,list);list.push({user:q});loadingChat=true;
   $('askForm').querySelector('button').disabled=true;$('question').value='';renderChat();$('mode').textContent='Проверяем сведения на выбранную дату…';
-  const view={...state};
+  const view={...state};agentStage('Получение данных',true);
   try{
-    const reply=await api('/api/chat',{...view,question:q,choice_id:choiceId,history:list.slice(0,-1).filter(m=>m.user).slice(-4).map(m=>m.user)});list.push({...reply,view});
+    const reply=await api('/api/chat',{...view,question:q,choice_id:choiceId,history:list.slice(0,-1).filter(m=>m.user).slice(-4).map(m=>m.user)});list.push({...reply,view});agentStage('Ответ сформирован');
     if(state.tab==='chat'&&chatKey()===key&&reply.id!==state.id&&!reply.choices.length){
       state={...state,id:reply.id,specific:'1',point:'',event:'',week:'',board:''};
       const nextKey=chatKey();chats.set(nextKey,[...list]);await load(true);
     }
   }
-  catch(e){list.push({text:e.message,mode:'Ошибка запроса',refs:[],section:'detail',id:state.id});}
+  catch(e){agentStage('Ошибка запроса');list.push({text:e.message,mode:'Ошибка запроса',refs:[],section:'detail',id:state.id});}
   finally{loadingChat=false;$('askForm').querySelector('button').disabled=false;renderChat();if(chatKey()===key)scrollToPart('askForm');}
 }
 function askFrom(section){
@@ -249,10 +248,10 @@ document.addEventListener('click',async event=>{
  if(a.choice){const m=chats.get(chatKey())?.[+a.message];state.id=a.choice;state.specific='1';state.week='';state.point='';state.event='';await load(true);ask(m?.retry||'Сколько по моему купону выплатили в срок?',a.choice);return;}
  if(a.return){const message=a.message!==undefined?(chats.get(chatKey())||[])[+a.message]:null;if(message?.view){state={...message.view,id:message.id,section:a.return,tab:'market'};await load(true);scrollToPart(a.return);return;}state.tab='market';state.section=a.return;if(a.id&&a.id!==state.id){state.id=a.id;state.point='';state.week='';state.event='';await load(true);}else{save(true);tabs();}scrollToPart(a.return);return;}
  if(a.bond){selectBond(a.bond);return;}if(a.offset!==undefined){offset=+a.offset;searchList();return;}
- if(a.action==='home'){state={...initial,date:state.date};await load(true);return;}
+ if(a.action==='home'){state={...initial,date:state.date,mode:state.mode};await load(true);return;}
  if(a.action==='details'){detailsModal();return;}
  if(a.action==='search'){$('query').focus();openSearch();return;}
- if(a.action==='refresh'){el.disabled=true;el.textContent='Запрос к бирже…';try{const r=await api('/api/refresh',state);await load();notice(r.message);}catch(e){notice(e.message);}finally{el.disabled=false;}return;}
+ if(a.action==='refresh'&&state.mode==='demo'){notice('Архивный режим использует сохранённые данные. Для обновления выберите Live.');return;}if(a.action==='refresh'){el.disabled=true;el.textContent='Запрос к бирже…';try{const r=await api('/api/refresh',state);await load();notice(r.message);}catch(e){notice(e.message);}finally{el.disabled=false;}return;}
 });
 document.addEventListener('keydown',e=>{if(e.key==='/'&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)&&!$('modal').open){e.preventDefault();state.tab='market';tabs();save();$('query').focus();openSearch();}if((e.key==='Enter'||e.key===' ')&&e.target.matches('svg [role="button"]')){e.preventDefault();e.target.dispatchEvent(new MouseEvent('click',{bubbles:true}));}});
 $('catalogBtn').onclick=()=>{$('query').focus();openSearch();};$('closeCatalog').onclick=()=>$('catalog').classList.add('hide');

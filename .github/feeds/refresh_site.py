@@ -30,7 +30,7 @@ def run():
     tools=Path(__file__).resolve().parent
     stage=site/"_site"
     stage.mkdir(exist_ok=True)
-    for name in ("index.html","app.js","market.js","pages.js","worker.js","style.css","favicon.svg","radar.svg"):
+    for name in ("index.html","app.js","market.js","terminal.js","terminal.css","pages.js","worker.js","style.css","favicon.svg","radar.svg"):
         shutil.copy2(site/name,stage/name)
     for name in ("python","research","documents"):
         shutil.copytree(site/name,stage/name,dirs_exist_ok=True)
@@ -54,12 +54,12 @@ def run():
                     previous.write_bytes(source.read("data/market.sqlite3"))
                     prior_catalog=work/"prior_catalog.sqlite3"
                     prior_catalog.write_bytes(source.read("data/radar.sqlite3"))
-                merge_previous(work/"data/market.sqlite3",previous,("terms","series","reports","headlines","daily","curve","corporate_yields","filings","filing_numbers"))
+                merge_previous(work/"data/market.sqlite3",previous,("terms","series","reports","headlines","daily","curve","corporate_yields","filings","filing_numbers","issue_type","bond_yields","issuer_sector"))
                 merge_previous(work/"data/radar.sqlite3",prior_catalog,("moex_defaults","registry_checks"))
             defaults=subprocess.run([sys.executable,"-u","sync.py","defaults"],cwd=work)
             if defaults.returncode:print("::warning::Реестр дефолтов не обновлён.")
-            sections=["curve","yields","rate","terms","news","indices","history"]
-            if datetime.now(timezone.utc).weekday()==0:sections+=["fundamentals","quarters"]
+            sections=["curve","yields","rate","terms","news","indices","history","spreads"]
+            if datetime.now(timezone.utc).weekday()==0:sections+=["types","sectors","fundamentals","quarters"]
             outcome=subprocess.run([sys.executable,"-u","collect_market.py",*sections],cwd=work)
             if outcome.returncode:
                 print("::warning::Часть источников недоступна. Для них сохранены последние датированные значения.")

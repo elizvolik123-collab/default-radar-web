@@ -12,6 +12,7 @@ function seriesPlot(points, label, unit, step=false) {
   return '<svg class="series-plot" viewBox="0 0 800 140" role="img" aria-label="'+esc(label)+'"><title>'+esc(label)+'</title>'+
     [0,.5,1].map(t=>'<path d="M68 '+(16+88*t)+'H778" stroke="#dce5e6"/><text x="1" y="'+(20+88*t)+'">'+fmt(max-(max-min)*t,2)+'</text>').join('')+
     '<path d="'+line+'" fill="none" stroke="#12766b" stroke-width="3"/><circle cx="'+x(points.at(-1))+'" cy="'+y(points.at(-1))+'" r="4" fill="#12766b"/>'+
+    points.map(p=>'<circle cx="'+x(p)+'" cy="'+y(p)+'" r="4" fill="transparent"><title>'+dt(p[0])+' · '+fmt(p[1])+' '+esc(unit)+'</title></circle>').join('')+
     '<text x="68" y="132">'+dt(points[0][0])+'</text><text x="778" y="132" text-anchor="end">'+dt(points.at(-1)[0])+'</text></svg>';
 }
 function changeText(s) {
@@ -72,6 +73,7 @@ function ticker(rows, liveTimes={}) {
   el.querySelector('.tape-track').innerHTML='<div>'+part+'</div><div aria-hidden="true">'+part+'</div>';
 }
 async function official(path,params) {
+  if(state.mode==='demo')throw Error('Архивный режим');
   const url=new URL('https://iss.moex.com/iss/'+path+'.json');
   for(const [k,v] of Object.entries({'iss.meta':'off',...params}))url.searchParams.set(k,v);
   const resp=await fetch(url,{signal:AbortSignal.timeout(10000),credentials:'omit'});
@@ -87,8 +89,8 @@ async function refreshTape(snapshotRows) {
     try {const m=await api('/api/macro?'+params());rows=[...m.series,...m.bonds];} catch {return;}
   }
   if(token!==tapeSeq)return;
-  macroCache.set(cut,rows);ticker(rows);
-  if(state.date!==marketDay||state.time||document.hidden)return;
+  macroCache.set(cut,rows);ticker(rows);$('tapeStatus').textContent='';
+  if(state.mode==='demo'||state.date!==marketDay||state.time||document.hidden)return;
   const times={};
   try {
     const codes=rows.filter(s=>s.code!=='KEY'&&!s.board).map(s=>s.code);
@@ -100,11 +102,12 @@ async function refreshTape(snapshotRows) {
       times[s.code]=q.UPDATETIME;return {...s,day:q.TRADEDATE,value:q.CURRENTVALUE,previous:q.LASTVALUE};
     });
     if(token===tapeSeq&&cut===state.date+'|'+state.time)ticker(updated,times);
-  } catch { /* The visible dates identify the published fallback. */ }
+  } catch { if(token===tapeSeq)$('tapeStatus').textContent='ISS недоступен · архив'; }
 }
 setInterval(()=>{if(!document.hidden && state.date===marketDay && !state.time)refreshTape();},120000);
 const chartCache=new Map();
 async function extendChart(item){
+  if(state.mode==='demo')return;
   if(!item.board)return;
   const end=state.time||state.date===marketDay?dtadd(state.date,-1):state.date;
   const path='history/engines/stock/markets/bonds/boards/'+encodeURIComponent(item.board)+'/securities/'+encodeURIComponent(item.bond.secid);
@@ -122,7 +125,7 @@ async function extendChart(item){
     }
     if(data!==item||!rows.length)return;
     const all=new Map(item.quotes.map(r=>[r.day,r]));
-    for(const r of rows){if(r.TRADEDATE<=end && r.NUMTRADES>0 && Number.isFinite(r.CLOSE))all.set(r.TRADEDATE,{day:r.TRADEDATE,price:r.CLOSE,volume:r.VALUE,trades:r.NUMTRADES,yield_close:r.YIELDCLOSE,board:item.board});}
+    for(const r of rows){if(r.TRADEDATE<=end && r.NUMTRADES>0 && Number.isFinite(r.CLOSE))all.set(r.TRADEDATE,{day:r.TRADEDATE,price:r.CLOSE,volume:r.VALUE,trades:r.NUMTRADES,yield_close:r.YIELDCLOSE,currency:r.CURRENCYID,board:item.board});}
     item.quotes=[...all.values()].sort((a,b)=>a.day.localeCompare(b.day));
     const observed=rows.filter(r=>r.TRADEDATE<=end && r.ACCINT!=null).at(-1);
     if(observed&&(!item.terms||observed.TRADEDATE>item.terms.seen.slice(0,10))){
@@ -132,6 +135,7 @@ async function extendChart(item){
       if($('coupons'))$('coupons').outerHTML=couponPanel(item);
     }
     if($('price'))$('price').outerHTML=price();
+    const extra=$('issueSeries');if(extra)extra.outerHTML=extraAnalytics(item);
   }catch{ /* Keep the archived chart when the exchange is unreachable. */ }
 }
 function couponPanel(item){

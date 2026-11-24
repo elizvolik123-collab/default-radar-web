@@ -15,6 +15,7 @@ const ready = openMarket();
 self.onmessage = async ({data}) => {
   try {
     const query = await ready;
+    if(data.url==="/api/chat")self.postMessage({id:data.id,stage:"Анализ документов и показателей"});
     const result = JSON.parse(query(JSON.stringify(data)));
     self.postMessage({id: data.id, result});
   } catch (error) {
