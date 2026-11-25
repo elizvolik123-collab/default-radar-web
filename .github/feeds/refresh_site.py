@@ -34,7 +34,7 @@ def run():
     tools=Path(__file__).resolve().parent
     stage=site/"_site"
     stage.mkdir(exist_ok=True)
-    for name in ("index.html","trading-chart.js","trading-chart.css","lightweight-charts.js","charts-LICENSE.txt","charts-NOTICE","app.js","market.js","terminal.js","terminal.css","pages.js","worker.js","style.css","favicon.svg","radar.svg"):
+    for name in ("index.html","tactile.js","tactile.css","tactile-LICENSE.txt","trading-chart.js","trading-chart.css","lightweight-charts.js","charts-LICENSE.txt","charts-NOTICE","app.js","market.js","terminal.js","terminal.css","pages.js","worker.js","style.css","favicon.svg","radar.svg"):
         shutil.copy2(site/name,stage/name)
     for name in ("python","research","documents"):
         shutil.copytree(site/name,stage/name,dirs_exist_ok=True)

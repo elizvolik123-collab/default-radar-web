@@ -134,3 +134,36 @@ body:has(#market:not(.hide)) {
 @supports(backdrop-filter:url(#market-glass-rim)) {
   #market :is(.panel,.macro-card)::after { backdrop-filter:url(#market-glass-rim); }
 }
+
+.optical :is(#optical-nav,#optical-switch,#optical-heading,#optical-action,#optical-prompt,#optical-risk-title)+* { display:none!important; }
+.optical #optical-prompt { grid-column:1/-1; width:min(100%,600px); margin:auto; }
+.optical #optical-prompt .tactile-prompt-box { width:100%; max-height:26dvh; overflow:auto; }
+.optical #optical-prompt textarea { color:var(--ink); }
+.optical #optical-prompt textarea::placeholder{color:var(--muted);}
+.optical #optical-action { align-self:center; }
+.optical .optical-risk { border-radius:16px; padding:10px 15px; font-weight:700; }
+.optical #optical-heading .display-heading { font:700 clamp(24px,3vw,42px)/1.18 Inter,system-ui,sans-serif; margin:0; }
+.optical #optical-nav button,.optical #optical-switch button { color:var(--ink); }
+.optical :is(#optical-nav,#optical-switch,#optical-action,#optical-prompt):focus-within { outline:2px solid var(--teal);outline-offset:3px;border-radius:20px; }
+#agentStage .orb { background:radial-gradient(circle at 32% 26%,#daefff 0%,#87b2ce 10%,transparent 37%),repeating-radial-gradient(ellipse at 68% 72%,#375369 0 2px,#243849 4px 6px); }
+@media(max-width:760px){.optical #optical-nav{order:3;width:100%;}.optical .nav{gap:4px;}.optical #optical-switch{margin-left:auto;}.optical #optical-prompt .tactile-prompt-box{padding:10px;}}
+@media(max-height:600px){.optical.chat-viewport #optical-heading{display:none;}}
+
+.optical { --text-primary:var(--ink); --text-secondary:var(--muted); --text-muted:var(--muted); }
+.optical #optical-prompt button:focus-visible { outline:2px solid var(--teal); outline-offset:2px; }
+.optical .orb { position:relative; overflow:hidden; perspective:60px; }
+.optical .orb::after { content:""; position:absolute; inset:3px; border-radius:50%; border:1px solid #badeefbd; transform:rotateX(54deg) rotateZ(-24deg); background:conic-gradient(from 180deg,transparent 62%,#93cce866); }
+.optical .working .orb::after { animation:radar-orbit 1.6s linear infinite; }
+@keyframes radar-orbit { to { transform:rotateX(54deg) rotateZ(336deg); } }
+@media(prefers-reduced-motion:reduce){.optical .working .orb::after{animation:none;}}
+@media(max-width:760px){
+  .optical .top .wrap.nav {display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;align-items:center;height:auto;}
+  .optical .top .brand {grid-column:1;grid-row:1;}
+  .optical #optical-switch {grid-column:2;grid-row:1;justify-self:end;--switch-w:76px;--switch-h:42px;--switch-thumb-size:34px;--switch-travel:34px;}
+  .optical #optical-nav {grid-column:1/-1;grid-row:2;min-width:0;}
+  .optical #optical-nav .tab-item {padding-inline:12px;}
+}
+.optical :is(#optical-nav,#optical-switch,#optical-action,#optical-prompt,#optical-heading,#optical-risk-title) canvas {filter:saturate(.24);}
+.optical #optical-heading .tactile-glass-word>span {opacity:1!important;color:var(--ink);}
+.optical #optical-heading .tactile-glass-word canvas {opacity:.4;}
+.optical #optical-prompt textarea {background:transparent;}

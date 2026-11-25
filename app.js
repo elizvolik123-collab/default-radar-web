@@ -175,6 +175,7 @@ function renderChat(){
   engine.value=state.mode==='demo'?'archive':localStorage.getItem('radar.chatEngine')||'auto';
   engine.disabled=loadingChat||state.mode==='demo';
   $('newChat').disabled=loadingChat;
+  window.dispatchEvent(new Event('radar-view'));
   const msgs=chats.get(chatKey())||[];
   $('dialogue').innerHTML=msgs.length?msgs.map((m,index)=>messageHtml(m,index)).join(''):'<div class="chat-intro"><img src="favicon.svg" alt=""><h2>Какой выпуск или показатель вас интересует?</h2><p>Назовите выпуск или компанию. Можно продолжить разбор открытой карточки.</p><div class="chips">'+['Какова динамика цены закрытия ОФЗ 26207?','Какова долговая нагрузка Газпрома?',(state.id?'Когда ближайший купон выбранного выпуска?':'Когда предусмотрена следующая купонная выплата по облигациям Сбербанка?')].map(q=>'<button data-prompt="'+esc(q)+'">'+esc(q)+'</button>').join('')+'</div></div>';
   $('mode').textContent=state.mode==='demo'?'Демонстрационный архив · поиск по документам и показателям':engine.value==='archive'?'Архивный поиск · по опубликованным данным':window.pagesRadar?window.pagesRadar.mode():stats?.model?(stats.provider==='local'?'Модель на этом компьютере · ':'Серверная модель · ')+stats.model_name+' · ответы по первоисточникам':'Архивный режим. Локальная модель или API не подключены.';
