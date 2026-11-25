@@ -29,6 +29,7 @@ function dtadd(day,n){const d=new Date(day+'T12:00:00Z');d.setUTCDate(d.getUTCDa
 function fromDay(day){return Date.parse(day.slice(0,10)+'T12:00:00Z')/86400000;}
 function tabs(){
   const chat=state.tab==='chat';
+  document.documentElement.classList.toggle('chat-viewport',chat);
   $('market').classList.toggle('hide',chat);$('chat').classList.toggle('hide',!chat);
   document.querySelectorAll('[data-tab]').forEach(b=>{b.classList.toggle('active',b.dataset.tab===state.tab);b.setAttribute('aria-pressed',b.dataset.tab===state.tab);});
   $('pageTitle').textContent=chat?'Спросить агента':'Рынок облигаций';
@@ -211,7 +212,7 @@ async function ask(q,choiceId=''){
     }
   }
   catch(e){agentStage('Ошибка запроса');list.push({text:e.message,mode:'Ошибка запроса',refs:[],section:'detail',id:state.id});}
-  finally{loadingChat=false;$('askForm').querySelector('button').disabled=false;renderChat();if(chatKey()===key)scrollToPart('askForm');}
+  finally{loadingChat=false;$('askForm').querySelector('button').disabled=false;renderChat();if(state.tab==='chat')dialogue.scrollTop=dialogue.scrollHeight;}
 }
 function askFrom(section){
   quitModal();state.tab='chat';state.specific='1';state.section=section==='doc'?'events':section;save(true);tabs();renderChat();

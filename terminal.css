@@ -59,3 +59,24 @@ body { background-image:radial-gradient(ellipse at 12% 0%,var(--glint),transpare
   @keyframes radar-enter { from { opacity:.5; transform:translateY(5px); } to { opacity:1; transform:none; } }
 }
 @media(max-width:620px){.nav nav{padding:2px;} #chat #askForm{bottom:5px;} }
+
+/* The application shell owns the viewport only while the conversation is open. */
+html.chat-viewport, .chat-viewport body { height:100%; overflow:hidden; }
+.chat-viewport body { height:100dvh; display:flex; flex-direction:column; }
+.chat-viewport .top { flex:none; }
+.chat-viewport #marketTape { display:none; }
+.chat-viewport main.wrap { flex:1; display:flex; flex-direction:column; min-height:0; padding-bottom:0; }
+.chat-viewport .page-head { flex:none; margin-block:8px; padding-block:4px; }
+.chat-viewport #subtitle { display:none; }
+.chat-viewport #chat { flex:1; width:100%; min-height:0; display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  grid-template-rows:auto auto minmax(0,1fr) auto auto; gap:4px 12px; }
+.chat-viewport #agentStage { align-self:center; margin:0; }
+.chat-viewport #chat #newChat { float:none; margin:0; }
+.chat-viewport #chatContext,.chat-viewport #dialogue,.chat-viewport #askForm,.chat-viewport #mode { grid-column:1/-1; }
+.chat-viewport #chatContext { max-height:16dvh; overflow:auto; }
+.chat-viewport #chat #dialogue { min-height:0; overflow-y:auto; overscroll-behavior:contain; align-content:start; padding:8px 4px; }
+.chat-viewport #chat #askForm { position:static; margin:0; }
+.chat-viewport #mode { margin:0; padding:2px 0 max(4px,env(safe-area-inset-bottom)); }
+@media(max-height:600px){.chat-viewport .page-head h1,.chat-viewport #mode{display:none;} .chat-viewport #chatContext{max-height:9dvh;} }
+.chat-viewport main.wrap { padding-bottom:4px; }
