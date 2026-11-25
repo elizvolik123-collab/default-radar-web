@@ -9,7 +9,6 @@ function agentStage(label,busy=false){const node=$('agentStage');node.classList.
 function setTheme(value){document.documentElement.dataset.theme=value;document.getElementById('themeToggle').setAttribute('aria-checked',String(value==='dark'));}
 setTheme(localStorage.getItem('radar.theme')==='dark'?'dark':'light');
 document.getElementById('themeToggle').onclick=()=>{const value=document.documentElement.dataset.theme==='dark'?'light':'dark';setTheme(value);localStorage.setItem('radar.theme',value);};
-document.getElementById('workMode').onchange=e=>{state.mode=e.target.value;if(state.mode==='demo'&&state.date===marketDay)state.date='2026-11-24';load(true);};
 const fields=[['name','Выпуск'],['issuer','Эмитент'],['id','ISIN / ID'],['kind','Тип'],['sector','Отрасль'],['ogrn','ОГРН'],['price','Цена, % ном.'],['ytm','Доходность, %'],['change','Δ цены, %'],['volume','Оборот'],['coupon','Купон на бумагу'],['currency','Валюта ном.'],['next_due','Ближайший платёж'],['maturity','Погашение'],['offer','Оферта'],['rating','Рейтинг'],['score','Индекс / 100'],['coverage','Полнота, %'],['event','Платёжное событие'],['day','Дата торгов']];
 function cell(r,k){const v=r[k];if(k==='change'&&Number.isFinite(v))return '<span class="'+directionClass(v)+'">'+(v>0?'+':'')+fmt(v)+'</span>';return v==null||v===''?'—':typeof v==='number'?fmt(v):esc(v);}
 function tableFor(rows){

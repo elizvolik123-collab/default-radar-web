@@ -67,9 +67,44 @@ document.addEventListener('click',e=>{
   if(btn.dataset.marketDays)marketWindow=Number(btn.dataset.marketDays);
   $('macroPanel').outerHTML=marketDashboard(macroSnapshot);
 });
+function initPaymentCalendar(root){
+  let month=state.date.slice(0,7), selected=state.date, version=0;
+  const iso=date=>date.toISOString().slice(0,10);
+  async function show(){
+    const request=++version, first=new Date(month+'-01T12:00:00Z');
+    const label=first.toLocaleDateString('ru-RU',{month:'long',year:'numeric',timeZone:'UTC'});
+    root.innerHTML='<div class="cal-nav"><button aria-label="Предыдущий месяц">‹</button><strong>'+label+'</strong><button aria-label="Следующий месяц">›</button></div><div class="cal-content" aria-live="polite">Загрузка календаря…</div>';
+    root.querySelectorAll('.cal-nav button').forEach((button,i)=>button.onclick=()=>{
+      first.setUTCMonth(first.getUTCMonth()+(i?1:-1));month=iso(first).slice(0,7);selected='';show();
+    });
+    const content=root.querySelector('.cal-content');
+    try{
+      const {payments}=await api('/api/payment-calendar?'+params()+'&month='+month);
+      if(request!==version||!root.isConnected)return;
+      const days=new Map();
+      for(const item of payments){if(!days.has(item.date))days.set(item.date,[]);days.get(item.date).push(item);}
+      if(!selected||!days.has(selected))selected=payments.find(p=>p.date>=state.date)?.date||payments[0]?.date||month+'-01';
+      const dates=[],cursor=new Date(first);
+      while(iso(cursor).startsWith(month)){dates.push(iso(cursor));cursor.setUTCDate(cursor.getUTCDate()+1);}
+      content.innerHTML='<div class="cal-grid">'+['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(x=>'<small>'+x+'</small>').join('')+'<i></i>'.repeat((first.getUTCDay()+6)%7)+dates.map(d=>{
+        const n=days.get(d)?.length||0;
+        return '<button data-day="'+d+'" aria-label="'+dt(d)+', выплат по графику: '+n+'">'+Number(d.slice(-2))+(n?'<b>'+n+'</b>':'')+'</button>';
+      }).join('')+'</div><div class="cal-list"></div>';
+      function select(day){
+        selected=day;
+        for(const b of content.querySelectorAll('[data-day]'))b.setAttribute('aria-pressed',String(b.dataset.day===day));
+        content.querySelector('.cal-list').innerHTML='<h3>'+dt(day)+' · по графику</h3>'+((days.get(day)||[]).map(p=>'<div class="docrow"><div><button data-bond="'+esc(p.id)+'">'+esc(p.name)+'</button><small>'+esc(p.kind)+'</small></div>'+link(p.source,'График выплат')+'</div>').join('')||'<p>В каталоге нет плановых выплат на эту дату.</p>');
+      }
+      content.querySelectorAll('[data-day]').forEach(b=>b.onclick=()=>select(b.dataset.day));select(selected);
+    }catch{if(request===version&&root.isConnected){content.innerHTML='Не удалось загрузить календарь. <button>Повторить</button>';content.querySelector('button').onclick=show;}}
+  }
+  show();
+}
 function newsFeed(m){
-  return '<section class="panel"><div class="section-head"><h2>Новости рынка</h2>'+link('https://t.me/markettwits','MarketTwits')+'</div>'+
-    (m.headlines.length?m.headlines.map(n=>'<div class="docrow"><small>'+dt(n.published,false)+' · '+esc(n.published.slice(11,16))+' МСК</small>'+link(n.url,n.title)+'</div>').join(''):'<p class="sub">В сохранённой ленте нет сообщений на дату анализа.</p>')+'</section>';
+  const groups=new Map();
+  for(const n of m.headlines){const day=n.published.slice(0,10);if(!groups.has(day))groups.set(day,[]);groups.get(day).push(n);}
+  return '<section class="panel market-news"><div class="section-head"><h2>Новости рынка</h2>'+link('https://t.me/markettwits','MarketTwits')+'</div>'+
+    (Array.from(groups,([day,items])=>'<h3>'+dt(day)+'</h3><ul>'+items.map(n=>'<li><time>'+esc(n.published.slice(11,16))+' МСК</time>'+link(n.url,n.title)+'</li>').join('')+'</ul>').join('')||'<p>В ленте нет сообщений на дату анализа.</p>')+'</section>';
 }
 const livePollMs=60000;
 const canStream=()=>state.mode==='live' && state.date===moscowDay() && !state.time;

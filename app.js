@@ -19,7 +19,7 @@ let state=readState(), data=null, stats=null, seq=0, searchSeq=0, offset=0, time
 const chats=new Map();
 const chatKey=()=>[state.mode,state.id,state.date,state.time].join('|');
 const params=()=>new URLSearchParams(Object.entries(state).filter(([,v])=>v!=='' && v!=null));
-function save(push=false){const url='?'+params();if(location.search!==url)history[push?'pushState':'replaceState']({},'',url);}
+function save(push=false){const query=params();if(state.mode==='live' && state.date===moscowDay() && !state.time)query.delete('date');const url='?'+query;if(location.search!==url)history[push?'pushState':'replaceState']({},'',url);}
 async function api(url,body){if(window.pagesRadar)return window.pagesRadar.request(url,body);const r=await fetch(url,body?{method:'POST',headers:{'Content-Type':'application/json','X-Radar':'1'},body:JSON.stringify(body)}:{});const d=await r.json();if(!r.ok)throw Error(d.error||'Сервер недоступен');return d;}
 function notice(msg){$('notice').innerHTML=msg?'<div class="strip">'+esc(msg)+'</div>':'';}
 function scrollToPart(id){requestAnimationFrame(()=>$(id)?.scrollIntoView({block:'start'}));}
@@ -34,7 +34,7 @@ function tabs(){
   document.querySelectorAll('[data-tab]').forEach(b=>{b.classList.toggle('active',b.dataset.tab===state.tab);b.setAttribute('aria-pressed',b.dataset.tab===state.tab);});
   $('pageTitle').textContent=chat?'Спросить агента':'Рынок облигаций';
   $('subtitle').textContent=chat?'Разбор выпуска с опорой на первоисточники':'Выпуски, платежи и кредитные события';
-  $('asof').value=state.date;$('workMode').value=state.mode;
+  $('asof').value=state.date;
   if(chat)stopBondFeed();else if(data?.request===seq)startBondFeed(data);
 }
 async function load(push=false){
@@ -51,10 +51,11 @@ async function load(push=false){
 function marketHome(m){
   const research=m.research;
   refreshTape([...m.series,...m.bonds]);
-  const methodology=(research?'<details class="panel"><summary>Методика и результаты проверки прогноза</summary><p>Проверка на последующих выплатах показывает, сколько просрочек удалось выявить и сколько предупреждений оказались ложными.</p><p>Горизонт от 1 до '+research.lead_days+' дней. Модель проверяет рыночную цену рублёвых корпоративных облигаций перед выплатой. Виды обязательств в модели — '+Object.keys(research.variants).map(esc).join(', ').toLowerCase()+'.</p><div class="metrics">'+[
+  const methodology=(research?'<details class="panel"><summary>Насколько точны предупреждения о просрочке?</summary><p>Проверка на последующих выплатах показывает, сколько просрочек удалось выявить и сколько предупреждений оказались ложными.</p><p>Горизонт от 1 до '+research.lead_days+' дней. Модель проверяет рыночную цену рублёвых корпоративных облигаций перед выплатой. Виды обязательств в модели — '+Object.keys(research.variants).map(esc).join(', ').toLowerCase()+'.</p><div class="metrics">'+[
       ['Платежей с подтверждением',research.universe.n],['Своевременных',research.universe.ontime],['С просрочкой',research.universe.late],['Купонов в позднем тесте за 7 дней',research.test.n]].map(([k,v])=>'<div><small>'+k+'</small><strong>'+fmt(v)+'</strong></div>').join('')+'</div><details><summary>Результаты на более поздних купонах</summary><p>Обучение по документам до '+dt(research.cutoff)+'. Проверка по срокам с '+dt(research.test.first)+' по '+dt(research.test.last)+'. Сигнал сработал перед '+fmt(research.test.tp)+' из '+fmt(research.test.late)+' просрочек. Ложных тревог — '+fmt(research.test.fp)+' из '+fmt(research.test.ontime)+' своевременных платежей.</p><p>ROC AUC '+fmt(research.test.roc_auc,3)+' · у постоянного прогноза 0,5. Своевременные платежи в обучении подтверждены у '+fmt(research.train_performing_issuers)+' эмитентов. Частота просрочек в этой выборке отличается от рынка.</p><p>Правило «цена ≤ 90% номинала» предупредило '+fmt(research.price_rule.tp)+' просрочек при '+fmt(research.price_rule.fp)+' ложных тревогах.</p>'+research.examples.map(e=>'<div class="docrow"><div><strong>'+esc(e.name)+'</strong><small>'+dt(e.due)+' · '+esc(e.outcome)+'</small></div>'+link(e.url,'Исход')+' '+link(e.price_url,'Торги')+'</div>').join('')+'<p><a href="research/payments.csv" download="payment_outcomes.csv">Скачать историю выплат и результаты (CSV)</a></p></details></details>':'');
-  $('marketHome').innerHTML=marketDashboard(m)+
-    (research?'<details id="marketWatch" class="panel"><summary>Проверить ближайшие платежи по всему каталогу</summary><div aria-live="polite"></div></details>':'')+newsFeed(m)+methodology;
+  $('marketHome').innerHTML=marketDashboard(m)+'<section id="paymentCalendar" class="panel"><h2>Календарь облигационных выплат</h2><div class="calendar-body"></div></section>'+
+    (research?'<details id="marketWatch" class="panel"><summary>Сигналы риска по выплатам на семь дней</summary><div aria-live="polite"></div></details>':'')+newsFeed(m)+methodology;
+  initPaymentCalendar($('paymentCalendar').querySelector('.calendar-body'));
   const watch=$('marketWatch');
   if(watch)watch.ontoggle=async()=>{
     if(!watch.open||watch.dataset.loaded)return;
@@ -271,7 +272,7 @@ function updateMarketMenu(){
     ['defaultEvidence','Платёжные нарушения'],['fundamentals','Отчётность эмитента'],['creditDocuments','Документы выпуска']
   ]:[
     ['macroPanel','Рыночные индикаторы'],['yieldCurve','Кривая доходности ОФЗ'],
-    ['corporateRates','Доходность корпоративного долга'],['marketWatch','Ближайшие платежи']
+    ['corporateRates','Доходность корпоративного долга'],['paymentCalendar','Календарь облигационных выплат']
   ];
   const available=sections.filter(([id])=>$(id)&&(!state.id||selected));
   const previous=nav.querySelector('[data-context-group]');
@@ -312,13 +313,13 @@ document.addEventListener('pointerdown',e=>{if(marketMenu.open&&!marketMenu.cont
 marketMenu.addEventListener('keydown',e=>{if(e.key==='Escape')closeMarketMenu(true);});
 $('catalogBtn').onclick=()=>{closeMarketMenu();$('query').focus();openSearch();};$('closeCatalog').onclick=()=>$('catalog').classList.add('hide');
 $('query').oninput=openSearch;['issuer','currency','status','eventFilter'].forEach(k=>$(k).oninput=openSearch);
+$('today').onclick=()=>{state.mode='live';setDate(moscowDay());};
 $('asof').onchange=e=>{if(e.target.value)setDate(e.target.value);};
 document.addEventListener('change',e=>{if(e.target.id==='boardSelect'){state.board=e.target.value;state.point='';load(true);}if(e.target.id==='clock'){state.time=e.target.value;state.point='';state.event='';load(true);}});
-$('about').onclick=sourceModal;$('closeModal').onclick=quitModal;
+$('closeModal').onclick=quitModal;
 $('chatEngine').onchange=e=>{localStorage.setItem('radar.chatEngine',e.target.value);renderChat();};
 $('newChat').onclick=()=>{if(loadingChat)return;chats.delete(chatKey());renderChat();$('question').value='';$('question').focus();};
 $('askForm').onsubmit=e=>{e.preventDefault();ask($('question').value.trim());};$('question').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('askForm').requestSubmit();}};
 window.onpopstate=()=>{state=readState();load().then(()=>{if(state.tab==='market')scrollToPart(state.section);});};
 tabs();load();if(window.pagesRadar)notice('Загружаем каталог и модель прогноза…');api('/api/coverage').then(r=>{stats=r;renderChat();}).catch(e=>notice(e.message));
 
-$('pauseTape').onclick=()=>{const tape=$('marketTape');const paused=tape.classList.toggle('paused');$('pauseTape').setAttribute('aria-pressed',String(paused));$('pauseTape').textContent=paused?'Продолжить':'Пауза';};
