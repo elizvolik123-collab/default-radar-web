@@ -39,7 +39,7 @@ function marketDashboard(m) {
 }
 function corporatePanel(rows){
   if(!rows?.length)return '';
-  return '<section class="corporate-rates"><h3>Доходность корпоративного долга</h3><div class="tablewrap"><table><thead><tr><th>Портфель</th><th>Доходность</th><th>Дюрация</th><th>Премия к КБД</th></tr></thead><tbody>'+rows.map(s=>'<tr><td>'+link(s.url,s.code)+'<small>'+dt(s.day)+'</small></td><td>'+fmt(s.yield_pct)+'%</td><td>'+fmt(s.duration_days,0)+' дн.</td><td>'+(s.premium_bp==null?'Нет сопоставимой КБД':link(s.curve_url,fmt(s.premium_bp,0)+' б. п.'))+'</td></tr>').join('')+'</tbody></table></div><p class="sub">Ориентировочная премия равна разности доходности индекса и бескупонной ставки ОФЗ на ту же дату. Ставка определяется линейной интерполяцией на срок дюрации. На премию влияют кредитный риск и ликвидность.</p></section>';
+  return '<section id="corporateRates" class="corporate-rates"><h3>Доходность корпоративного долга</h3><div class="tablewrap"><table><thead><tr><th>Портфель</th><th>Доходность</th><th>Дюрация</th><th>Премия к КБД</th></tr></thead><tbody>'+rows.map(s=>'<tr><td>'+link(s.url,s.code)+'<small>'+dt(s.day)+'</small></td><td>'+fmt(s.yield_pct)+'%</td><td>'+fmt(s.duration_days,0)+' дн.</td><td>'+(s.premium_bp==null?'Нет сопоставимой КБД':link(s.curve_url,fmt(s.premium_bp,0)+' б. п.'))+'</td></tr>').join('')+'</tbody></table></div><p class="sub">Ориентировочная премия равна разности доходности индекса и бескупонной ставки ОФЗ на ту же дату. Ставка определяется линейной интерполяцией на срок дюрации. На премию влияют кредитный риск и ликвидность.</p></section>';
 }
 const indexMeaning={
   RGBI:'Динамика чистых цен ОФЗ отражает изменение рыночной стоимости государственного долга.',

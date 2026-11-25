@@ -7,7 +7,7 @@ let screenPage=0,screenRequest=0,screenView='',screenFilters={},screenResult=nul
 function persist(key,values){localStorage.setItem(key,JSON.stringify([...values]));}
 function agentStage(label,busy=false){const node=$('agentStage');node.classList.toggle('working',busy);node.lastElementChild.textContent=label;}
 function setTheme(value){document.documentElement.dataset.theme=value;document.getElementById('themeToggle').setAttribute('aria-checked',String(value==='dark'));}
-setTheme(localStorage.getItem('radar.theme')==='light'?'light':'dark');
+setTheme(localStorage.getItem('radar.theme')==='dark'?'dark':'light');
 document.getElementById('themeToggle').onclick=()=>{const value=document.documentElement.dataset.theme==='dark'?'light':'dark';setTheme(value);localStorage.setItem('radar.theme',value);};
 document.getElementById('workMode').onchange=e=>{state.mode=e.target.value;if(state.mode==='demo'&&state.date===marketDay)state.date='2026-11-24';load(true);};
 const fields=[['name','Выпуск'],['issuer','Эмитент'],['id','ISIN / ID'],['kind','Тип'],['sector','Отрасль'],['ogrn','ОГРН'],['price','Цена, % ном.'],['ytm','Доходность, %'],['change','Δ цены, %'],['volume','Оборот'],['coupon','Купон на бумагу'],['currency','Валюта ном.'],['next_due','Ближайший платёж'],['maturity','Погашение'],['offer','Оферта'],['rating','Рейтинг'],['score','Индекс / 100'],['coverage','Полнота, %'],['event','Платёжное событие'],['day','Дата торгов']];

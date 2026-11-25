@@ -257,7 +257,39 @@ document.addEventListener('click',async event=>{
  if(a.action==='refresh'&&state.mode==='demo'){notice('Архивный режим использует сохранённые данные. Для обновления выберите Live.');return;}if(a.action==='refresh'){el.disabled=true;el.textContent='Запрос к бирже…';try{const r=await api('/api/refresh',state);await load();notice(r.message);}catch(e){notice(e.message);}finally{el.disabled=false;}return;}
 });
 document.addEventListener('keydown',e=>{if(e.key==='/'&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)&&!$('modal').open){e.preventDefault();state.tab='market';tabs();save();$('query').focus();openSearch();}if((e.key==='Enter'||e.key===' ')&&e.target.matches('svg [role="button"]')){e.preventDefault();e.target.dispatchEvent(new MouseEvent('click',{bubbles:true}));}});
-$('catalogBtn').onclick=()=>{$('query').focus();openSearch();};$('closeCatalog').onclick=()=>$('catalog').classList.add('hide');
+const marketMenu=$('marketMenu');
+function closeMarketMenu(focus=false){
+  marketMenu.open=false;
+  if(focus)marketMenu.querySelector('summary').focus();
+}
+function updateMarketMenu(){
+  const nav=marketMenu.querySelector('nav');
+  nav.querySelectorAll('[data-dynamic]').forEach(button=>button.remove());
+  const sections=[['macroPanel','Рыночные индикаторы'],['yieldCurve','Кривая доходности ОФЗ'],['corporateRates','Доходность корпоративного долга'],
+    ['marketWatch','Ближайшие платежи'],['bondRadar','Кредитный риск'],['price','Цена и объём торгов'],['coupons','НКД и купоны'],
+    ['fundamentals','Отчётность эмитента'],['creditDocuments','Документы выпуска']];
+  for(const [id,label] of sections){
+    if(!$(id))continue;
+    const button=document.createElement('button');
+    button.type='button';button.dataset.jump=id;button.dataset.dynamic='';button.textContent=label;
+    nav.append(button);
+  }
+}
+marketMenu.ontoggle=()=>{if(marketMenu.open)updateMarketMenu();};
+new MutationObserver(()=>{if(marketMenu.open)updateMarketMenu();}).observe($('marketHome'),{childList:true});
+new MutationObserver(()=>{if(marketMenu.open)updateMarketMenu();}).observe($('detail'),{childList:true});
+marketMenu.onclick=e=>{
+  const id=e.target.closest('[data-jump]')?.dataset.jump;
+  const target=id&&$(id);
+  if(!target)return;
+  closeMarketMenu();
+  if(target.tagName==='DETAILS')target.open=true;
+  const heading=target.querySelector('summary,h2,h3')||target;
+  heading.tabIndex=-1;heading.focus({preventScroll:true});target.scrollIntoView({block:'start'});
+};
+document.addEventListener('pointerdown',e=>{if(marketMenu.open&&!marketMenu.contains(e.target))closeMarketMenu();});
+marketMenu.addEventListener('keydown',e=>{if(e.key==='Escape')closeMarketMenu(true);});
+$('catalogBtn').onclick=()=>{closeMarketMenu();$('query').focus();openSearch();};$('closeCatalog').onclick=()=>$('catalog').classList.add('hide');
 $('query').oninput=openSearch;['issuer','currency','status','eventFilter'].forEach(k=>$(k).oninput=openSearch);
 $('asof').onchange=e=>{if(e.target.value)setDate(e.target.value);};
 document.addEventListener('change',e=>{if(e.target.id==='boardSelect'){state.board=e.target.value;state.point='';load(true);}if(e.target.id==='clock'){state.time=e.target.value;state.point='';state.event='';load(true);}});

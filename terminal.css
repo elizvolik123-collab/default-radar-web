@@ -207,3 +207,40 @@ statement-chart select {max-width:100%;padding:6px;border-radius:8px;color:var(-
 .statement-scale {position:relative;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;display:grid;}
 .statement-scale span {position:relative;grid-area:1/1;align-self:start;justify-self:end;transform:translateY(-50%);}
 .statement-periods {grid-column:2;}
+
+/* Reference swatches applied to the surfaces people see before scrolling. */
+html:root {--shell:#f1f7f7;--shell-rail:#d5e5e5;--shell-active:#b0d7d8;--shell-accent:#f7cbca;--shell-border:#ddd3d3;--shell-ink:#263638;}
+html:root[data-theme=dark]{--shell:#293638;--shell-rail:#354548;--shell-active:#b0d7d8;--shell-accent:#f7cbca;--shell-border:#5d6b6b;--shell-ink:#f1f7f7;}
+body,body:has(#market:not(.hide)){background-color:var(--shell);color:var(--ink);background-image:linear-gradient(119deg,transparent 38%,color-mix(in srgb,var(--shell-active) 36%,transparent) 72%,color-mix(in srgb,var(--shell-accent) 60%,transparent));background-attachment:fixed;}
+.top {background:var(--shell);border-bottom:1px solid var(--shell-border);}
+.nav {height:56px;}
+.optical #optical-nav {--tabs-h:36px;--tabs-item-h:30px;--space-4:3px;--space-24:12px;--font-size-base:13px;background:var(--shell-rail);border-radius:99px;}
+.optical #optical-switch {--switch-w:58px;--switch-h:32px;--switch-thumb-size:26px;--switch-travel:26px;--switch-pad:3px;}
+.nav nav:not(#marketMenu nav){background:var(--shell-rail);padding:2px;}
+.nav nav button {font-size:13px;padding:5px 10px;min-height:30px;}
+.nav nav button.active,.optical #optical-nav .tab-item.active {background:var(--shell-active);color:#243536;}
+.optical #optical-nav canvas {opacity:.4;}
+#themeToggle {transform:scale(.88);}
+#market #macroPanel,#market .bond-summary {background:linear-gradient(115deg,var(--surface) 16%,var(--shell-rail) 66%,color-mix(in srgb,var(--shell-accent) 40%,var(--surface)));border-color:var(--shell-border);}
+#market #macroPanel .macro-card {background:var(--surface);border-color:var(--shell-border);}
+#market #macroPanel .macro-card.selected {background:var(--shell-active);color:#243536;border-color:#5d6b6b;}
+#market #macroPanel .macro-card.selected :is(small,strong,span){color:#263638;}
+html body .exchange-options {background:var(--shell-rail);border-color:var(--shell-border);}
+html body .exchange-toolbar button[aria-pressed=true]{background:var(--shell-active);color:#243536;}
+#marketMenu {position:relative;flex:none;z-index:8;}
+#marketMenu summary {display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 12px;background:var(--shell-rail);color:var(--shell-ink);border:1px solid var(--line);border-radius:10px;font-size:14px;font-weight:600;list-style:none;}
+#marketMenu summary::-webkit-details-marker{display:none;}
+#marketMenu summary::after {content:"";width:7px;height:7px;border:solid currentColor;border-width:0 1.5px 1.5px 0;transform:rotate(45deg);}
+#marketMenu[open] summary::after {transform:rotate(225deg);}
+#marketMenu nav {position:absolute;right:0;top:calc(100% + 5px);width:min(270px,86vw);display:grid;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:6px;box-shadow:0 8px 18px #24353624;}
+#marketMenu nav button {text-align:left;padding:9px 10px;border-radius:7px;color:var(--ink);}
+#marketMenu nav button:is(:hover,:focus-visible){background:var(--shell-active);color:#243536;}
+@media(max-width:760px){.optical .top .wrap.nav,.top .wrap.nav{gap:3px 8px;padding-block:4px;min-height:0;}.optical #optical-nav{width:max-content;max-width:100%;}.optical #optical-nav .tab-item{padding-inline:10px;} #marketMenu summary {padding:8px;font-size:12px;}}
+#market .searchrow .search input {background:transparent;color:var(--ink);}
+html[data-theme=light] .top {background:#d5e5e5;}
+html[data-theme=light] .nav .brand {color:#243536;}
+html[data-theme=light] .nav .brand span {color:#485a5b;}
+html[data-theme=light] #marketMenu nav button,html[data-theme=light] #optical-nav .tab-item {color:#243536;}
+html[data-theme=light] #market #macroPanel .macro-card:not(.selected) {background:#f1f7f7;color:#243536;}
+html[data-theme=light] #market #macroPanel .macro-card:not(.selected) :is(small,span){color:#455859;}
+#marketMenu nav button {transition:none;}
