@@ -29,7 +29,7 @@ function marketDashboard(m) {
   const row=m.series.find(s=>s.code===activeMacro)||m.series[0];
   if (!row) return '<section class="panel"><h2>Рыночные индикаторы</h2><p>За выбранную дату данные отсутствуют.</p></section>';
   const points=row.points.filter(p=>p[0]>=dtadd(row.day,1-marketWindow));
-  return '<section class="panel macro" id="macroPanel"><h2>Рыночные индикаторы</h2><div class="macro-grid">'+m.series.map(s=>
+  return '<section class="panel macro" id="macroPanel"><div id="market-material" aria-hidden="true"></div><h2>Рыночные индикаторы</h2><div class="macro-grid">'+m.series.map(s=>
     '<button class="macro-card '+(s.code===row.code?'selected':'')+'" data-index="'+esc(s.code)+'" aria-pressed="'+(s.code===row.code)+'"><small>'+esc(s.label)+'</small><strong>'+fmt(s.value)+' '+esc(s.unit)+'</strong><span>'+esc(changeText(s))+' · '+dt(s.day,false)+'</span></button>').join('')+
     '</div><div class="section-head"><div><h3>'+esc(row.label)+'</h3><span class="minor">'+esc(row.code)+' · '+esc(row.unit)+'</span></div>'+
     (row.code==='KEY'?'<div class="seg">'+[30,90,365,730].map(n=>'<button data-market-days="'+n+'" class="'+(n===marketWindow?'sel':'')+'">'+(n>=365?(n/365)+' г':n+' д')+'</button>').join('')+'</div>':'')+'</div>'+
@@ -194,6 +194,11 @@ function renderBondQuote(item){
   const trade=item.exchangeTrade,last=item.quotes.at(-1)||item.last;
   const price=trade?.PRICE??last?.price;
   const timing=trade?dt(trade.TRADEDATE)+' · '+trade.TRADETIME+' МСК':last?.day?dt(last.day)+' · время сделки отсутствует':'Нет подтверждённой цены';
+  const summaryPrice=document.getElementById('summary-price');
+  if(summaryPrice){
+    summaryPrice.textContent=price==null?'Нет данных':fmt(price,4)+' % ном.';
+    document.getElementById('summary-trade-time').textContent=[item.board,timing].filter(Boolean).join(' · ');
+  }
   const historical=!canStream();
   const label=state.mode==='demo'?'Архив · Demo':historical?'Архив на дату анализа':
     item.sessionStatus??(item.board?'Загрузка торговой сессии…':'Режим торгов отсутствует');
@@ -373,6 +378,22 @@ document.addEventListener('visibilitychange',()=>{
   if(document.hidden){stopBondFeed();stopTapeFeed();}
   else refreshVisibleMarket();
 });
+function bondHighlights(item){
+  const terms=item.terms;
+  const planned=item.plans.filter(p=>p.bond===item.bond.id&&p.kind==='Купон'&&p.date>=state.date)
+    .sort((a,b)=>a.date.localeCompare(b.date))[0];
+  const due=[planned?.date,terms?.due].filter(d=>d&&d>=state.date).sort()[0];
+  const fromTerms=Boolean(due&&terms?.due===due&&terms.coupon!=null);
+  const amount=fromTerms?terms.coupon:(due&&planned?.date===due?planned.per_unit:null);
+  const currency=fromTerms?terms.currency:planned?.currency;
+  const money=(n,c)=>n==null?'Нет данных':fmt(n)+' '+esc(cashCurrency(c||''));
+  const field=(label,value,note)=>'<div><dt>'+label+'</dt><dd>'+value+'</dd><small>'+note+'</small></div>';
+  return '<dl class="bond-highlights">'+
+    field('Кредитный риск',esc(item.radar?.label||'Нет оценки'),item.radar?'На '+dt(item.radar.asof):'')+
+    field('Цена сделки','<span id="summary-price">—</span>','<span id="summary-trade-time"></span>')+
+    field('НКД на бумагу',money(terms?.accrued,terms?.settlement_currency),terms?'Снимок '+dt(terms.seen)+' · '+esc(terms.board||''):'')+
+    field('Ближайший купон',money(amount,currency),due?'По графику · '+dt(due):'Дата не опубликована')+'</dl>';
+}
 function couponPanel(item){
   const t=item.terms, plan=item.plans.find(p=>p.bond===item.bond.id && p.kind==='Купон');
   const currentCoupon=t?.due>=state.date?t:null;

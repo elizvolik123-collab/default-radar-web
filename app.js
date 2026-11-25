@@ -97,7 +97,7 @@ function timeline(){
 function statusLabel(){const recent=data.registry?.[0],outcome=data.outcomes?.[0];if(outcome&&(!data.payment||outcome.due>data.payment.date)&&(!recent||outcome.due>recent.due))return [(outcome.late?'Просрочка':'Выплата в срок')+' · '+dt(outcome.due,false),outcome.late?'red':'green'];if(recent && (!data.payment||recent.due>data.payment.date))return [recent.status+' · '+dt(recent.due,false),'red'];if(data.payment)return [data.payment.status,data.payment.status.includes('опозданием')?'amber':'green'];const ev=data.events.find(x=>x.kind==='Просрочка');return ev?['Нарушение срока','amber']:data.events.some(x=>x.kind==='Рейтинг')?['Есть рейтинговый сигнал','amber']:['Исполнение не подтверждено',''];}
 function overview(){
   const b=data.bond,[label,color]=statusLabel(), next=data.next;
-  return '<div class="panel"><div class="card-title"><div class="identity"><div class="emblem">'+icon('bond')+'</div><div><h2>'+esc(b.name)+'</h2><div class="mono">'+esc(b.isin||b.secid)+'</div></div></div><span class="badge '+color+'">'+esc(label)+'</span></div><div class="metrics">'+[
+  return '<div class="panel bond-summary"><div class="card-title"><div class="identity"><div class="emblem">'+icon('bond')+'</div><div><h2>'+esc(b.name)+'</h2><div class="mono">'+esc(b.isin||b.secid)+'</div></div></div><span class="badge '+color+'">'+esc(label)+'</span></div>'+bondHighlights(data)+'<div class="metrics">'+[
     ['Эмитент',b.issuer_name,b.inn?'ИНН '+b.inn:'ИНН не указан'],
     ['Номинал',b.nominal!=null?fmt(b.nominal)+' '+(cashCurrency(b.currency)):'—',b.nominal==null?'Нет данных на срез':'На одну облигацию'],
     ['Погашение',dt(b.maturity),b.maturity?'По параметрам выпуска':'Нет данных на срез'],
