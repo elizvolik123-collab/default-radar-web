@@ -188,3 +188,22 @@ html[data-theme=light] #market .macro-card[aria-pressed=true] {border-color:#5d6
 .trend-row { padding:12px 0;border-top:1px solid var(--line); }
 .trend-values { display:flex;flex-wrap:wrap;gap:8px 20px;margin:7px 0; }
 .trend-values small { display:block;color:var(--muted); }
+statement-chart {display:block;margin:16px 0;padding:14px;background:var(--metric-surface);border:1px solid var(--line);border-radius:14px;}
+statement-chart label {display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-weight:600;}
+statement-chart select {max-width:100%;padding:6px;border-radius:8px;color:var(--ink);background:var(--surface-alt);border:1px solid var(--line);}
+.statement-axis,.statement-periods {font-size:12px;color:var(--muted);}
+.statement-axis {margin:12px 0 0;}
+.statement-plot {position:relative;height:145px;}
+.statement-plot svg {width:100%;height:100%;fill:none;stroke:var(--teal);}
+.statement-plot polyline,.statement-grid {vector-effect:non-scaling-stroke;stroke-width:2;}
+.statement-plot .statement-grid {stroke:var(--line);stroke-width:1;}
+.statement-plot .statement-point {position:absolute;transform:translate(-50%,-50%);width:36px;height:36px;border:0;padding:0;background:transparent;border-radius:50%;}
+.statement-point::after {content:"";display:block;margin:auto;width:10px;height:10px;background:var(--teal);border-radius:50%;border:2px solid var(--metric-surface);}
+.statement-point[aria-pressed=true]::after {outline:2px solid var(--teal);}
+.statement-periods {position:relative;height:22px;}
+.statement-periods span {position:absolute;transform:translateX(-50%);}
+.statement-note {display:flex;align-items:baseline;flex-wrap:wrap;gap:6px 16px;border-top:1px solid var(--line);padding-top:10px;font-variant-numeric:tabular-nums;}
+.statement-chart {display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:8px;}
+.statement-scale {position:relative;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;display:grid;}
+.statement-scale span {position:relative;grid-area:1/1;align-self:start;justify-self:end;transform:translateY(-50%);}
+.statement-periods {grid-column:2;}

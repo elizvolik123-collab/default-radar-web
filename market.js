@@ -378,6 +378,53 @@ document.addEventListener('visibilitychange',()=>{
   if(document.hidden){stopBondFeed();stopTapeFeed();}
   else refreshVisibleMarket();
 });
+class StatementChart extends HTMLElement {
+  connectedCallback(){
+    this.series=data?.trends||[];
+    if(!this.series.length)return;
+    this.innerHTML='<label>Показатель <select>'+this.series.map((t,i)=>'<option value="'+i+'">'+esc(t.name)+'</option>').join('')+
+      '</select></label><div class="statement-axis"></div><div class="statement-chart"></div><div class="statement-note" aria-live="polite"></div>';
+    const select=this.querySelector('select');
+    select.onchange=()=>this.plot(this.series[select.selectedIndex]);
+    this.plot(this.series[0]);
+  }
+  plot(trend){
+    const points=trend.points,values=points.map(p=>p.value);
+    const min=Math.min(...values),max=Math.max(...values);
+    // Place points at the end of the reporting period, including gaps in coverage.
+    const quarter={'':4,Q1:1,Q2:2,H1:2,Q3:3,M9:3,Q4:4};
+    const dates=points.map(p=>4*Number(p.period.slice(0,4))+quarter[p.period.slice(4)]);
+    const x=i=>7+86*(dates[i]-dates[0])/(dates.at(-1)-dates[0]);
+    const y=i=>max===min?50:82-64*(values[i]-min)/(max-min);
+    const area=this.querySelector('.statement-chart');
+    this.querySelector('.statement-axis').textContent=trend.standard+' · '+trend.name+(trend.unit?' ('+trend.unit+')':'');
+    const ticks=max===min?[[50,min]]:[[18,max],[50,(min+max)/2],[82,min]];
+    area.innerHTML='<div class="statement-scale" aria-hidden="true">'+ticks.map(([pos,value])=>'<span style="top:'+pos+'%">'+fmt(value,3)+'</span>').join('')+'</div><div class="statement-plot"><svg aria-hidden="true" viewBox="0 0 100 100" preserveAspectRatio="none">'+
+      '<path class="statement-grid" d="M0 18H100 M0 50H100 M0 82H100"/><polyline points="'+points.map((_,i)=>x(i)+','+y(i)).join(' ')+'"/></svg>'+
+      points.map((p,i)=>'<button type="button" class="statement-point" style="left:'+x(i)+'%;top:'+y(i)+'%" aria-label="'+esc(p.period+' · '+fmt(p.value,3)+' '+trend.unit)+'"></button>').join('')+
+      '</div><div class="statement-periods">'+points.map((p,i)=>'<span style="left:'+x(i)+'%">'+esc(p.period)+'</span>').join('')+'</div>';
+    const buttons=Array.from(area.querySelectorAll('button'));
+    const show=i=>{
+      const point=points[i],delta=i?point.value-points[i-1].value:null;
+      const difference=i?'К '+esc(points[i-1].period)+': '+(delta>0?'+':'')+fmt(delta,3)+' '+esc(trend.unit==='%'?'п. п.':trend.unit):'Первый доступный период';
+      buttons.forEach((b,j)=>{b.setAttribute('aria-pressed',String(i===j));b.tabIndex=i===j?0:-1;});
+      this.querySelector('.statement-note').innerHTML='<strong>'+esc(point.period)+' · '+fmt(point.value,3)+' '+esc(trend.unit)+'</strong><span>'+difference+'</span>'+
+        link(point.url,'Отчёт · '+dt(point.published));
+    };
+    buttons.forEach((b,i)=>{
+      b.onpointerenter=b.onfocus=b.onclick=()=>show(i);
+      b.onkeydown=e=>{
+        if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
+        e.preventDefault();
+        const next=e.key==='Home'?0:e.key==='End'?buttons.length-1:i+(e.key==='ArrowLeft'?-1:1);
+        buttons[Math.max(0,Math.min(buttons.length-1,next))].focus();
+      };
+    });
+    show(points.length-1);
+  }
+}
+customElements.define('statement-chart',StatementChart);
+
 function riskDynamics(item){
   const history=item.risk_history||[], trends=item.trends||[];
   const path=history.map((v,i)=>'<li><small>'+dt(v.day)+'</small> <b>'+esc(v.level)+'</b>'+
@@ -390,7 +437,7 @@ function riskDynamics(item){
   }).join('');
   return '<div class="risk-dynamics"><h4>Динамика риска и отчётности</h4>'+
     (history.length>1?'<ul>'+path+'</ul>':'<p>Для сравнения категорий недостаточно исторических оценок.</p>')+
-    (rows||'<p>Для сравнения показателей нужны как минимум два сопоставимых отчётных периода.</p>')+'</div>';
+    (rows?'<statement-chart></statement-chart><details><summary>Все значения и источники</summary>'+rows+'</details>':'<p>Для сравнения показателей нужны как минимум два сопоставимых отчётных периода.</p>')+'</div>';
 }
 function riskExplanation(item){
   const profile=item.expert, radar=item.radar;
