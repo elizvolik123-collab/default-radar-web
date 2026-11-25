@@ -163,3 +163,53 @@ document.addEventListener('click',e=>{
   else if('level' in a){screenFilters.level=a.level;screenPage=0;refreshScreen();}
   else if('export' in a)exportScreen().catch(e=>notice(e.message));
 });
+
+// A signed normal map bends the background at the curved rim. Neutral grey
+// leaves the centre untouched, and the controls render above the optical layer.
+(() => {
+  const surfaces = document.querySelectorAll('.nav nav, #themeToggle, #askForm, .model-picker');
+  const ns = 'http://www.w3.org/2000/svg';
+  const element = name => document.createElementNS(ns, name);
+  const svg = element('svg');
+  svg.setAttribute('aria-hidden','true');
+  svg.setAttribute('width','0');
+  svg.setAttribute('height','0');
+  svg.style.position='absolute';
+  const defs = element('defs');
+  svg.append(defs);
+  document.body.append(svg);
+  for (const [index, surface] of Array.from(surfaces).entries()) {
+    surface.classList.add('glass-lens');
+    const filter = element('filter'), map = element('feImage'), bend = element('feDisplacementMap');
+    filter.id='radar-lens-'+index;
+    for (const [key,value] of Object.entries({x:0,y:0,width:'100%',height:'100%','color-interpolation-filters':'sRGB'})) filter.setAttribute(key,value);
+    map.setAttribute('preserveAspectRatio','none');
+    map.setAttribute('result','rim');
+    for(const [key,value] of Object.entries({in:'SourceGraphic',in2:'rim',scale:14,xChannelSelector:'R',yChannelSelector:'G'})) bend.setAttribute(key,value);
+    filter.append(map,bend);
+    defs.append(filter);
+    surface.style.setProperty('--lens-filter','url(#'+filter.id+')');
+    new ResizeObserver(()=>{
+      const w=surface.offsetWidth,h=surface.offsetHeight;
+      if(!w||!h)return;
+      const canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      const ctx=canvas.getContext('2d'), image=ctx.createImageData(w,h);
+      const r=Math.min(parseFloat(getComputedStyle(surface).borderRadius)||16,w/2,h/2);
+      for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+        const dx=x+.5-w/2,dy=y+.5-h/2;
+        const qx=Math.abs(dx)-w/2+r,qy=Math.abs(dy)-h/2+r;
+        const a=Math.max(0,qx),b=Math.max(0,qy),length=Math.hypot(a,b);
+        const depth=r-length-Math.min(Math.max(qx,qy),0);
+        const intensity=Math.max(0,1-Math.abs(depth-2)/8);
+        const nx=length?a/length:Number(qx>qy),ny=length?b/length:Number(qy>=qx);
+        const i=(y*w+x)*4;
+        image.data[i]=128+115*Math.sign(dx)*nx*intensity;
+        image.data[i+1]=128+115*Math.sign(dy)*ny*intensity;
+        image.data[i+3]=255;
+      }
+      ctx.putImageData(image,0,0);
+      map.setAttribute('href',canvas.toDataURL());
+    }).observe(surface);
+  }
+})();
