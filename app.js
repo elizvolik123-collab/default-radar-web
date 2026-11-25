@@ -97,7 +97,7 @@ function timeline(){
 function statusLabel(){const recent=data.registry?.[0],outcome=data.outcomes?.[0];if(outcome&&(!data.payment||outcome.due>data.payment.date)&&(!recent||outcome.due>recent.due))return [(outcome.late?'Просрочка':'Выплата в срок')+' · '+dt(outcome.due,false),outcome.late?'red':'green'];if(recent && (!data.payment||recent.due>data.payment.date))return [recent.status+' · '+dt(recent.due,false),'red'];if(data.payment)return [data.payment.status,data.payment.status.includes('опозданием')?'amber':'green'];const ev=data.events.find(x=>x.kind==='Просрочка');return ev?['Нарушение срока','amber']:data.events.some(x=>x.kind==='Рейтинг')?['Есть рейтинговый сигнал','amber']:['Исполнение не подтверждено',''];}
 function overview(){
   const b=data.bond,[label,color]=statusLabel(), next=data.next;
-  return '<div class="panel bond-summary"><div class="card-title"><div class="identity"><div class="emblem">'+icon('bond')+'</div><div><h2>'+esc(b.name)+'</h2><div class="mono">'+esc(b.isin||b.secid)+'</div></div></div><span class="badge '+color+'">'+esc(label)+'</span></div>'+bondHighlights(data)+riskExplanation(data)+'<div class="metrics">'+[
+  return '<div id="bondOverview" class="panel bond-summary"><div class="card-title"><div class="identity"><div class="emblem">'+icon('bond')+'</div><div><h2>'+esc(b.name)+'</h2><div class="mono">'+esc(b.isin||b.secid)+'</div></div></div><span class="badge '+color+'">'+esc(label)+'</span></div>'+bondHighlights(data)+riskExplanation(data)+'<div class="metrics">'+[
     ['Эмитент',b.issuer_name,b.inn?'ИНН '+b.inn:'ИНН не указан'],
     ['Номинал',b.nominal!=null?fmt(b.nominal)+' '+(cashCurrency(b.currency)):'—',b.nominal==null?'Нет данных на срез':'На одну облигацию'],
     ['Погашение',dt(b.maturity),b.maturity?'По параметрам выпуска':'Нет данных на срез'],
@@ -264,16 +264,37 @@ function closeMarketMenu(focus=false){
 }
 function updateMarketMenu(){
   const nav=marketMenu.querySelector('nav');
-  nav.querySelectorAll('[data-dynamic]').forEach(button=>button.remove());
-  const sections=[['macroPanel','Рыночные индикаторы'],['yieldCurve','Кривая доходности ОФЗ'],['corporateRates','Доходность корпоративного долга'],
-    ['marketWatch','Ближайшие платежи'],['bondRadar','Кредитный риск'],['price','Цена и объём торгов'],['coupons','НКД и купоны'],
-    ['fundamentals','Отчётность эмитента'],['creditDocuments','Документы выпуска']];
-  for(const [id,label] of sections){
-    if(!$(id))continue;
-    const button=document.createElement('button');
-    button.type='button';button.dataset.jump=id;button.dataset.dynamic='';button.textContent=label;
-    nav.append(button);
+  const selected=state.id&&data?.bond.id===state.id;
+  const sections=state.id?[
+    ['bondOverview','Сводка выпуска'],['bondRadar','Кредитный риск'],['price','Цена и объём торгов'],
+    ['coupons','НКД и купоны'],['forecast','Прогноз платежа'],['paymentJournal','История выплат'],
+    ['defaultEvidence','Платёжные нарушения'],['fundamentals','Отчётность эмитента'],['creditDocuments','Документы выпуска']
+  ]:[
+    ['macroPanel','Рыночные индикаторы'],['yieldCurve','Кривая доходности ОФЗ'],
+    ['corporateRates','Доходность корпоративного долга'],['marketWatch','Ближайшие платежи']
+  ];
+  const available=sections.filter(([id])=>$(id)&&(!state.id||selected));
+  const previous=nav.querySelector('[data-context-group]');
+  if(!available.length){previous?.remove();return;}
+  const group=document.createElement('div');
+  group.className='jump-group';group.dataset.contextGroup='';group.setAttribute('role','group');
+  group.setAttribute('aria-labelledby','jump-context');
+  const title=document.createElement('strong');
+  title.id='jump-context';title.textContent=selected?'Выбранный выпуск':'Рыночная аналитика';
+  group.append(title);
+  if(selected){
+    const identity=document.createElement('small');
+    identity.textContent=[data.bond.name,data.bond.isin||data.bond.secid].filter(Boolean).join(' · ');
+    group.append(identity);
   }
+  for(const [id,label] of available){
+    const button=document.createElement('button');
+    button.type='button';button.dataset.jump=id;button.textContent=label;
+    group.append(button);
+  }
+  if(previous?.isEqualNode(group))return;
+  if(previous)previous.remove();
+  if(selected)nav.prepend(group);else nav.append(group);
 }
 marketMenu.ontoggle=()=>{if(marketMenu.open)updateMarketMenu();};
 new MutationObserver(()=>{if(marketMenu.open)updateMarketMenu();}).observe($('marketHome'),{childList:true});

@@ -244,3 +244,9 @@ html[data-theme=light] #marketMenu nav button,html[data-theme=light] #optical-na
 html[data-theme=light] #market #macroPanel .macro-card:not(.selected) {background:#f1f7f7;color:#243536;}
 html[data-theme=light] #market #macroPanel .macro-card:not(.selected) :is(small,span){color:#455859;}
 #marketMenu nav button {transition:none;}
+#marketMenu nav {width:min(300px,calc(100vw - 28px));max-height:65dvh;overflow-y:auto;overscroll-behavior:contain;padding:6px;}
+#marketMenu .jump-group {display:grid;}
+#marketMenu .jump-group + .jump-group {margin-top:5px;border-top:1px solid var(--line);padding-top:5px;}
+#marketMenu .jump-group>strong {background:var(--shell-rail);color:var(--ink);font-size:13px;padding:7px 10px;border-radius:6px;}
+#marketMenu .jump-group>small {color:var(--muted);line-height:1.4;padding:5px 10px 0;}
+@media(max-width:760px){#marketMenu .jump-group button{min-height:44px;padding:8px 12px;}}
