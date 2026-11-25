@@ -170,8 +170,9 @@ function docModal(id){const d=data.documents.find(x=>x.id===id);if(!d)return;sta
 function detailsModal(){const b=data.bond;modal('Реквизиты выпуска','<div class="modalbody"><b>'+esc(b.name)+'</b><p>'+esc(b.issuer_name)+'</p><p>ИНН '+esc(b.inn||'не указан')+'</p><p>ISIN '+esc(b.isin||'не указан')+' · SECID '+esc(b.secid)+'</p><p>Последняя сохранённая сделка на срез — '+dt(data.last?.day)+'</p><p>Режимы с историей на срез — '+esc(data.boards.join(', ')||'нет сведений')+'</p><p class="meta">Связи с группой и поручители в справочнике не подтверждены.</p>'+link(b.source,'Справочник MOEX')+'</div>');}
 function renderChat(){
   $('chatContext').innerHTML=data?'<div class="panel chat-context"><div><div class="cap">В контексте</div><strong>'+esc(data.bond.name)+'</strong><div class="mono">'+esc(state.id)+' · '+dt(state.date)+(state.time?' '+esc(state.time):'')+(state.week?' · неделя с '+dt(state.week,false):'')+(state.point?' · сделка '+dt(state.point,false):'')+'</div></div><button class="textbtn" data-return="'+esc(state.section)+'">К аналитике →</button></div>':'';
+  $('newChat').disabled=loadingChat;
   const msgs=chats.get(chatKey())||[];
-  $('dialogue').innerHTML=msgs.length?msgs.map((m,index)=>messageHtml(m,index)).join(''):'<div class="chat-intro"><img src="favicon.svg" alt=""><h2>Какой выпуск или показатель вас интересует?</h2><p>Назовите выпуск или компанию. Можно продолжить разбор открытой карточки.</p><div class="chips">'+['Какова динамика цены закрытия ОФЗ 26207?','Что известно о выплатах RU000A10DK80?',(state.id?'Когда ближайший купон выбранного выпуска?':'Когда предусмотрена следующая купонная выплата по облигациям Сбербанка?')].map(q=>'<button data-prompt="'+esc(q)+'">'+esc(q)+'</button>').join('')+'</div></div>';
+  $('dialogue').innerHTML=msgs.length?msgs.map((m,index)=>messageHtml(m,index)).join(''):'<div class="chat-intro"><img src="favicon.svg" alt=""><h2>Какой выпуск или показатель вас интересует?</h2><p>Назовите выпуск или компанию. Можно продолжить разбор открытой карточки.</p><div class="chips">'+['Какова динамика цены закрытия ОФЗ 26207?','Какова долговая нагрузка Газпрома?',(state.id?'Когда ближайший купон выбранного выпуска?':'Когда предусмотрена следующая купонная выплата по облигациям Сбербанка?')].map(q=>'<button data-prompt="'+esc(q)+'">'+esc(q)+'</button>').join('')+'</div></div>';
   $('mode').textContent=state.mode==='demo'?'Демонстрационный архив · поиск по документам и показателям':window.pagesRadar?window.pagesRadar.mode():stats?.model?(stats.provider==='local'?'Модель на этом компьютере · ':'Серверная модель · ')+stats.model_name+' · ответы по первоисточникам':'Архивный режим. Локальная модель или API не подключены.';
 
 }
@@ -182,7 +183,7 @@ function messageHtml(m,index){
   const choose=choices.length?'<label class="series-search">Серия или ISIN<input type="search" data-series="'+index+'" aria-label="Уточнить серию" placeholder="Уточнить серию в каталоге"></label><div class="chips" id="choices-'+index+'">'+choiceButtons(choices.slice(0,8),index)+'</div>':'';
   const references=m.refs.map((r,i)=>link(r.url,'['+(i+1)+'] '+r.label,'proof')).join('');
   const related=(m.related||[]).filter(b=>b.id!==m.id).map(b=>'<button class="textbtn" data-other="'+esc(b.id)+'">'+esc(b.name)+' →</button>').join('');
-  return '<div class="bubble"><small>'+esc(m.mode)+'</small><p>'+cited+'</p>'+references+choose+'<div class="row-links">'+(!choices.length?'<button class="textbtn" data-return="'+esc(m.section)+'" data-message="'+index+'" data-id="'+esc(m.id)+'">Открыть в аналитике →</button>':'')+related+'</div></div>';
+  return '<div class="bubble"><small>'+esc(m.mode)+'</small><div class="answer-body">'+cited.split(/\n\s*\n/).map(p=>'<p>'+p+'</p>').join('')+'</div>'+(references?'<details open class="answer-sources"><summary>Источники · '+m.refs.length+'</summary>'+references+'</details>':'')+choose+'<div class="row-links">'+(!choices.length?'<button class="textbtn" data-return="'+esc(m.section)+'" data-message="'+index+'" data-id="'+esc(m.id)+'">Открыть в аналитике →</button>':'')+related+'</div></div>';
 }
 function choiceButtons(items,index){return items.map(b=>'<button class="lightbtn" data-choice="'+esc(b.id)+'" data-message="'+index+'">'+esc(b.name)+' · '+esc(b.isin||b.id)+'</button>').join('');}
 let seriesTimer;
@@ -252,6 +253,7 @@ $('query').oninput=openSearch;['issuer','currency','status','eventFilter'].forEa
 $('asof').onchange=e=>{if(e.target.value)setDate(e.target.value);};
 document.addEventListener('change',e=>{if(e.target.id==='boardSelect'){state.board=e.target.value;state.point='';load(true);}if(e.target.id==='clock'){state.time=e.target.value;state.point='';state.event='';load(true);}});
 $('about').onclick=sourceModal;$('closeModal').onclick=quitModal;
+$('newChat').onclick=()=>{if(loadingChat)return;chats.delete(chatKey());renderChat();$('question').value='';$('question').focus();};
 $('askForm').onsubmit=e=>{e.preventDefault();ask($('question').value.trim());};$('question').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('askForm').requestSubmit();}};
 window.onpopstate=()=>{state=readState();load().then(()=>{if(state.tab==='market')scrollToPart(state.section);});};
 tabs();load();if(window.pagesRadar)notice('Загружаем каталог и модель прогноза…');api('/api/coverage').then(r=>{stats=r;renderChat();}).catch(e=>notice(e.message));
