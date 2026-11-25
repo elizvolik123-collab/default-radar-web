@@ -171,10 +171,13 @@ function docModal(id){const d=data.documents.find(x=>x.id===id);if(!d)return;sta
 function detailsModal(){const b=data.bond;modal('Реквизиты выпуска','<div class="modalbody"><b>'+esc(b.name)+'</b><p>'+esc(b.issuer_name)+'</p><p>ИНН '+esc(b.inn||'не указан')+'</p><p>ISIN '+esc(b.isin||'не указан')+' · SECID '+esc(b.secid)+'</p><p>Последняя сохранённая сделка на срез — '+dt(data.last?.day)+'</p><p>Режимы с историей на срез — '+esc(data.boards.join(', ')||'нет сведений')+'</p><p class="meta">Связи с группой и поручители в справочнике не подтверждены.</p>'+link(b.source,'Справочник MOEX')+'</div>');}
 function renderChat(){
   $('chatContext').innerHTML=data?'<div class="panel chat-context"><div><div class="cap">В контексте</div><strong>'+esc(data.bond.name)+'</strong><div class="mono">'+esc(state.id)+' · '+dt(state.date)+(state.time?' '+esc(state.time):'')+(state.week?' · неделя с '+dt(state.week,false):'')+(state.point?' · сделка '+dt(state.point,false):'')+'</div></div><button class="textbtn" data-return="'+esc(state.section)+'">К аналитике →</button></div>':'';
+  const engine=$('chatEngine');
+  engine.value=state.mode==='demo'?'archive':localStorage.getItem('radar.chatEngine')||'auto';
+  engine.disabled=loadingChat||state.mode==='demo';
   $('newChat').disabled=loadingChat;
   const msgs=chats.get(chatKey())||[];
   $('dialogue').innerHTML=msgs.length?msgs.map((m,index)=>messageHtml(m,index)).join(''):'<div class="chat-intro"><img src="favicon.svg" alt=""><h2>Какой выпуск или показатель вас интересует?</h2><p>Назовите выпуск или компанию. Можно продолжить разбор открытой карточки.</p><div class="chips">'+['Какова динамика цены закрытия ОФЗ 26207?','Какова долговая нагрузка Газпрома?',(state.id?'Когда ближайший купон выбранного выпуска?':'Когда предусмотрена следующая купонная выплата по облигациям Сбербанка?')].map(q=>'<button data-prompt="'+esc(q)+'">'+esc(q)+'</button>').join('')+'</div></div>';
-  $('mode').textContent=state.mode==='demo'?'Демонстрационный архив · поиск по документам и показателям':window.pagesRadar?window.pagesRadar.mode():stats?.model?(stats.provider==='local'?'Модель на этом компьютере · ':'Серверная модель · ')+stats.model_name+' · ответы по первоисточникам':'Архивный режим. Локальная модель или API не подключены.';
+  $('mode').textContent=state.mode==='demo'?'Демонстрационный архив · поиск по документам и показателям':engine.value==='archive'?'Архивный поиск · по опубликованным данным':window.pagesRadar?window.pagesRadar.mode():stats?.model?(stats.provider==='local'?'Модель на этом компьютере · ':'Серверная модель · ')+stats.model_name+' · ответы по первоисточникам':'Архивный режим. Локальная модель или API не подключены.';
 
 }
 function messageHtml(m,index){
@@ -205,7 +208,7 @@ async function ask(q,choiceId=''){
   $('askForm').querySelector('button').disabled=true;$('question').value='';renderChat();$('mode').textContent='Проверяем сведения на выбранную дату…';
   const view={...state};agentStage('Получение данных',true);
   try{
-    const reply=await api('/api/chat',{...view,question:q,choice_id:choiceId,history:list.slice(0,-1).filter(m=>m.user).slice(-4).map(m=>m.user)});list.push({...reply,view});agentStage('Ответ сформирован');
+    const reply=await api('/api/chat',{...view,engine:$('chatEngine').value,question:q,choice_id:choiceId,history:list.slice(0,-1).filter(m=>m.user).slice(-4).map(m=>m.user)});list.push({...reply,view});agentStage('Ответ сформирован');
     if(state.tab==='chat'&&chatKey()===key&&reply.id!==state.id&&!reply.choices.length){
       state={...state,id:reply.id,specific:'1',point:'',event:'',week:'',board:''};
       const nextKey=chatKey();chats.set(nextKey,[...list]);await load(true);
@@ -254,6 +257,7 @@ $('query').oninput=openSearch;['issuer','currency','status','eventFilter'].forEa
 $('asof').onchange=e=>{if(e.target.value)setDate(e.target.value);};
 document.addEventListener('change',e=>{if(e.target.id==='boardSelect'){state.board=e.target.value;state.point='';load(true);}if(e.target.id==='clock'){state.time=e.target.value;state.point='';state.event='';load(true);}});
 $('about').onclick=sourceModal;$('closeModal').onclick=quitModal;
+$('chatEngine').onchange=e=>{localStorage.setItem('radar.chatEngine',e.target.value);renderChat();};
 $('newChat').onclick=()=>{if(loadingChat)return;chats.delete(chatKey());renderChat();$('question').value='';$('question').focus();};
 $('askForm').onsubmit=e=>{e.preventDefault();ask($('question').value.trim());};$('question').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('askForm').requestSubmit();}};
 window.onpopstate=()=>{state=readState();load().then(()=>{if(state.tab==='market')scrollToPart(state.section);});};

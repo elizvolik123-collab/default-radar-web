@@ -6,7 +6,7 @@ const favorites=savedSet('radar.favorites'), comparison=savedSet('radar.comparis
 let screenPage=0,screenRequest=0,screenView='',screenFilters={},screenResult=null;
 function persist(key,values){localStorage.setItem(key,JSON.stringify([...values]));}
 function agentStage(label,busy=false){const node=$('agentStage');node.classList.toggle('working',busy);node.lastElementChild.textContent=label;}
-function setTheme(value){document.documentElement.dataset.theme=value;document.getElementById('themeToggle').textContent=value==='dark'?'Светлая тема':'Тёмная тема';}
+function setTheme(value){document.documentElement.dataset.theme=value;document.getElementById('themeToggle').setAttribute('aria-checked',String(value==='dark'));}
 setTheme(localStorage.getItem('radar.theme')==='light'?'light':'dark');
 document.getElementById('themeToggle').onclick=()=>{const value=document.documentElement.dataset.theme==='dark'?'light':'dark';setTheme(value);localStorage.setItem('radar.theme',value);};
 document.getElementById('workMode').onchange=e=>{state.mode=e.target.value;if(state.mode==='demo'&&state.date===marketDay)state.date='2026-11-24';load(true);};

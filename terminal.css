@@ -80,3 +80,22 @@ html.chat-viewport, .chat-viewport body { height:100%; overflow:hidden; }
 .chat-viewport #mode { margin:0; padding:2px 0 max(4px,env(safe-area-inset-bottom)); }
 @media(max-height:600px){.chat-viewport .page-head h1,.chat-viewport #mode{display:none;} .chat-viewport #chatContext{max-height:9dvh;} }
 .chat-viewport main.wrap { padding-bottom:4px; }
+
+/* Separate the monochrome controls from the blue analytical surfaces. */
+#themeToggle { position:relative; isolation:isolate; display:inline-flex; justify-content:space-around; align-items:center; flex:none; width:68px; height:36px; padding:0; border-radius:30px; background:#37393c; color:#eee; border:1px solid #888b90; box-shadow:inset 0 1px 2px #ffffff38; }
+#themeToggle span { width:28px; text-align:center; font:20px/1 system-ui; }
+#themeToggle::before { content:""; position:absolute; z-index:-1; left:3px; top:3px; width:28px; height:28px; border-radius:50%; background:linear-gradient(145deg,#fff,#c6c8ca); box-shadow:0 2px 5px #0004; }
+#themeToggle[aria-checked=true]::before { transform:translateX(32px); }
+#themeToggle[aria-checked=true] span:last-child,#themeToggle[aria-checked=false] span:first-child { color:#202124; }
+@media(prefers-reduced-motion:no-preference){#themeToggle::before{transition:transform .22s ease;}}
+#chat #askForm { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 10px; padding:9px 12px; background:linear-gradient(150deg,#ffffff16,transparent 68%),#25272aee; color:#f4f4f5; border:1px solid #86888b; box-shadow:inset 0 1px 1px #ffffff54,0 4px 16px #0002; }
+#chat #question { grid-column:1/-1; resize:none; width:100%; min-height:36px; height:42px; padding:4px 8px; color:#fafafa; border:0; }
+#chat #question::placeholder { color:#d0d1d3; }
+.model-picker { display:inline-flex; align-items:center; gap:7px; justify-self:start; padding:4px 8px; border-radius:16px; border:1px solid #85878a; background:#404246; box-shadow:inset 0 1px 1px #ffffff36; font-size:12px; }
+.model-picker span { color:#ddd; }
+.model-picker select { color:#fff; background:#404246; border:0; font:inherit; cursor:pointer; }
+#askForm button.primary { border-radius:50%; width:36px; height:36px; padding:8px; background:#e8e9eb; color:#212327; }
+html { --analytics-face:#f2f8ffed; --analytics-edge:#bbd3e7; --analytics-glint:#ffffffbd; }
+html[data-theme=dark] { --analytics-face:#172a39ec; --analytics-edge:#3c566b; --analytics-glint:#b9ddff19; }
+#market :is(.panel,.macro-card) { background:linear-gradient(135deg,var(--analytics-glint),transparent 62%),var(--analytics-face); border:1px solid var(--analytics-edge); border-radius:18px; box-shadow:inset 0 1px 0 var(--analytics-glint),0 5px 16px #0a263712; }
+@media(max-height:600px){#chat #askForm{grid-template-columns:auto minmax(0,1fr) auto;align-items:center;} #chat #question{grid-column:2;grid-row:1;} .model-picker{grid-column:1;grid-row:1;} .model-picker span{display:none;}}

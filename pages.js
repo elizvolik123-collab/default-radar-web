@@ -22,7 +22,7 @@
   };
   window.pagesRadar = {mode, async request(url, body) {
     if (failure) throw Error(failure);
-    if(body && url==='/api/chat' && body.mode!=='demo' && endpoint){
+    if(body && url==='/api/chat' && body.mode!=='demo' && body.engine!=='archive' && endpoint){
       try{
         const r=await fetch(endpoint,{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json','X-Radar':'1'},body:JSON.stringify(body),signal:AbortSignal.timeout(140000)});
         if(r.ok){const result=await r.json();if(result.mode!=='Модель временно недоступна')return result;}
@@ -31,7 +31,7 @@
     const id = ++nextId;
     return new Promise((resolve, reject) => {
       pending.set(id, {resolve, reject});
-      worker.postMessage({id, url, body,groq_endpoint:!endpoint && url==='/api/chat' && body?.mode!=='demo'?groq:null});
+      worker.postMessage({id, url, body,groq_endpoint:!endpoint && url==='/api/chat' && body?.mode!=='demo' && body?.engine!=='archive'?groq:null});
     });
   }};
 })();
