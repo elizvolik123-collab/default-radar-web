@@ -203,13 +203,13 @@ document.addEventListener('input',e=>{
     try{const r=await api('/api/search?'+p);if(key===chatKey()&&input.isConnected&&input.value.trim()===q)$('choices-'+index).innerHTML=choiceButtons(r.items.slice(0,12),index)||'Выпуски на эту дату не найдены.';}catch(e){notice(e.message);}
   },180);
 });
-async function ask(q,choiceId=''){
+async function ask(q,choiceId='',selection={}){
   if(loadingChat||!q.trim()||(state.id&&!data))return;
   const key=chatKey(),list=chats.get(key)||[];chats.set(key,list);list.push({user:q});loadingChat=true;
   $('askForm').querySelector('button').disabled=true;$('question').value='';renderChat();$('mode').textContent='Проверяем сведения на выбранную дату…';
   const view={...state};agentStage('Получение данных',true);
   try{
-    const reply=await api('/api/chat',{...view,engine:$('chatEngine').value,question:q,choice_id:choiceId,history:list.slice(0,-1).filter(m=>m.user).slice(-4).map(m=>m.user)});list.push({...reply,view});agentStage('Ответ сформирован');
+    const reply=await api('/api/chat',{...view,...selection,engine:$('chatEngine').value,question:q,choice_id:choiceId,history:list.slice(0,-1).filter(m=>m.user).slice(-4).map(m=>m.user)});list.push({...reply,view});agentStage('Ответ сформирован');
     if(state.tab==='chat'&&chatKey()===key&&reply.id!==state.id&&!reply.choices.length){
       state={...state,id:reply.id,specific:'1',point:'',event:'',week:'',board:''};
       const nextKey=chatKey();chats.set(nextKey,[...list]);await load(true);

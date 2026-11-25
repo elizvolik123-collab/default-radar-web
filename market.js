@@ -409,7 +409,15 @@ class StatementChart extends HTMLElement {
       const difference=i?'К '+esc(points[i-1].period)+': '+(delta>0?'+':'')+fmt(delta,3)+' '+esc(trend.unit==='%'?'п. п.':trend.unit):'Первый доступный период';
       buttons.forEach((b,j)=>{b.setAttribute('aria-pressed',String(i===j));b.tabIndex=i===j?0:-1;});
       this.querySelector('.statement-note').innerHTML='<strong>'+esc(point.period)+' · '+fmt(point.value,3)+' '+esc(trend.unit)+'</strong><span>'+difference+'</span>'+
-        link(point.url,'Отчёт · '+dt(point.published));
+        link(point.url,'Отчёт · '+dt(point.published))+'<button type="button" class="outline" '+(!i?'disabled':'')+'>Объяснить изменение</button>';
+      this.querySelector('.statement-note button').onclick=()=>{
+        if(!i||loadingChat||data?.bond.id!==state.id)return;
+        const id=data.bond.id,previous=points[i-1].period;
+        state.tab='chat';state.specific='1';state.section='bondRadar';save(true);tabs();renderChat();
+        ask('Объясни изменение показателя «'+trend.name+'» по выпуску '+id+' за '+point.period+
+          ' относительно '+previous+'. Как это повлияло на риск выпуска?',id,
+          {trend_key:trend.key,trend_period:point.period,previous_period:previous});
+      };
     };
     buttons.forEach((b,i)=>{
       b.onpointerenter=b.onfocus=b.onclick=()=>show(i);
