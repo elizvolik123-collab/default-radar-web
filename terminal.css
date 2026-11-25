@@ -185,3 +185,6 @@ html[data-theme=light] #market .macro-card[aria-pressed=true] {border-color:#5d6
 .risk-explanation .section-head { flex-wrap:wrap; gap:8px; }
 .risk-explanation ul { padding-left:1.25rem; }
 .risk-explanation p,.risk-explanation li { line-height:1.55; }
+.trend-row { padding:12px 0;border-top:1px solid var(--line); }
+.trend-values { display:flex;flex-wrap:wrap;gap:8px 20px;margin:7px 0; }
+.trend-values small { display:block;color:var(--muted); }

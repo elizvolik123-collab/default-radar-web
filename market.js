@@ -378,6 +378,20 @@ document.addEventListener('visibilitychange',()=>{
   if(document.hidden){stopBondFeed();stopTapeFeed();}
   else refreshVisibleMarket();
 });
+function riskDynamics(item){
+  const history=item.risk_history||[], trends=item.trends||[];
+  const path=history.map((v,i)=>'<li><small>'+dt(v.day)+'</small> <b>'+esc(v.level)+'</b>'+
+    (i&&v.level!==history[i-1].level&&v.reasons.length?' · '+esc(v.reasons.join(' ')):'')+'</li>').join('');
+  const rows=trends.map(t=>{
+    const values=t.points.map(p=>'<div>'+link(p.url,p.period+' · '+fmt(p.value,3)+' '+t.unit)+
+      '<small>Опубликовано '+dt(p.published)+'</small></div>').join('');
+    return '<div class="trend-row"><strong>'+esc(t.name)+' · '+esc(t.standard)+'</strong><div class="trend-values">'+values+
+      '</div><small>Изменение за последние два показанных периода: '+(t.delta>0?'+':'')+fmt(t.delta,3)+' '+esc(t.unit==='%'?'п. п.':t.unit)+'. '+esc(t.explanation)+'</small></div>';
+  }).join('');
+  return '<div class="risk-dynamics"><h4>Динамика риска и отчётности</h4>'+
+    (history.length>1?'<ul>'+path+'</ul>':'<p>Для сравнения категорий недостаточно исторических оценок.</p>')+
+    (rows||'<p>Для сравнения показателей нужны как минимум два сопоставимых отчётных периода.</p>')+'</div>';
+}
 function riskExplanation(item){
   const profile=item.expert, radar=item.radar;
   const reasons=radar?.assessment?.length?radar.assessment:
@@ -401,7 +415,7 @@ function riskExplanation(item){
   }
   return '<section class="risk-explanation"><div class="section-head"><h3>Почему такой уровень риска</h3>'+
     '<button class="outline" data-ask="bondRadar">Разобрать с ИИ</button></div><ul>'+list+'</ul>'+
-    '<p><b>Отчётность эмитента</b><br>'+financial+'</p></section>';
+    '<p><b>Отчётность эмитента</b><br>'+financial+'</p>'+riskDynamics(item)+'</section>';
 }
 function bondHighlights(item){
   const terms=item.terms;
