@@ -4,7 +4,7 @@ import os
 from contextlib import closing
 from pathlib import Path
 
-from credit_data import issuer_reports, issuer_filings, market, open_data
+from credit_data import issuer_reports, issuer_filings, market, open_data, reviewed_statements
 from storage import connect, now
 
 
@@ -20,6 +20,7 @@ def export(out):
     with closing(open_data()) as facts, closing(connect()) as catalog:
         available={r[0] for r in facts.execute("SELECT DISTINCT issuer FROM reports")}
         available.update(r[0] for r in facts.execute("SELECT DISTINCT issuer FROM filings WHERE removed=0"))
+        available.update(r["inn"] for r in reviewed_statements())
         directory=[]
         active={r[0] for r in catalog.execute("SELECT DISTINCT issuer FROM bonds WHERE traded=1")}
         for inn,name in catalog.execute("SELECT id,name FROM issuers ORDER BY id"):

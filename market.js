@@ -71,79 +71,271 @@ function newsFeed(m){
   return '<section class="panel"><div class="section-head"><h2>Новости рынка</h2>'+link('https://t.me/markettwits','MarketTwits')+'</div>'+
     (m.headlines.length?m.headlines.map(n=>'<div class="docrow"><small>'+dt(n.published,false)+' · '+esc(n.published.slice(11,16))+' МСК</small>'+link(n.url,n.title)+'</div>').join(''):'<p class="sub">В сохранённой ленте нет сообщений на дату анализа.</p>')+'</section>';
 }
-function ticker(rows, liveTimes={}) {
+const livePollMs=60000;
+const canStream=()=>state.mode==='live' && state.date===moscowDay() && !state.time;
+const marketKey=(board,code)=>board+'/'+code;
+const marketPath=(board,code)=>'engines/stock/markets/bonds/boards/'+encodeURIComponent(board)+'/securities'+(code?'/'+encodeURIComponent(code):'');
+const tapeView={archive:[],byKey:new Map(),cut:'',controller:null};
+let bondFeed;
+function ticker(rows) {
   const el=$('marketTape');
-  if (!rows.length) {el.hidden=true;return;}
-  const part=rows.map(s=>'<span><b>'+esc(s.board?s.label:s.code==='KEY'?'Ключевая ставка':s.code)+'</b> '+fmt(s.value)+' '+esc(s.unit)+' <small><span class="'+directionClass(s.previous==null?null:s.value-s.previous)+'">'+esc(changeText(s))+'</span> · '+dt(s.day,false)+(liveTimes[s.code]?' '+esc(liveTimes[s.code])+' МСК':'')+'</small></span>').join('');
-  el.hidden=false;
-  el.querySelector('.tape-track').innerHTML='<div>'+part+'</div><div aria-hidden="true">'+part+'</div>';
+  el.hidden=!rows.length;
+  if(!rows.length)return;
+  const items=rows.map(s=>'<span><b>'+esc(s.board?s.label:s.code==='KEY'?'Ключевая ставка':s.code)+'</b> '+fmt(s.value,4)+' '+esc(s.unit)+' <small><span class="'+directionClass(s.previous==null?null:s.value-s.previous)+'">'+esc(changeText(s))+'</span> · '+dt(s.day,false)+(s.time?' '+esc(s.time)+' МСК':'')+'</small></span>').join('');
+  const html='<div>'+items+'</div><div aria-hidden="true">'+items+'</div>';
+  const track=el.querySelector('.tape-track');
+  if(track.dataset.quotes!==html){track.innerHTML=html;track.dataset.quotes=html;}
 }
-async function official(path,params) {
+async function official(path,params,signal) {
   if(state.mode==='demo')throw Error('Архивный режим');
   const url=new URL('https://iss.moex.com/iss/'+path+'.json');
   for(const [k,v] of Object.entries({'iss.meta':'off',...params}))url.searchParams.set(k,v);
-  const resp=await fetch(url,{signal:AbortSignal.timeout(10000),credentials:'omit'});
+  const timeout=AbortSignal.timeout(12000);
+  const resp=await fetch(url,{signal:signal?AbortSignal.any([signal,timeout]):timeout,credentials:'omit'});
   if(!resp.ok)throw Error('ISS '+resp.status);
   return resp.json();
 }
-function issRows(block) {return block.data.map(row=>Object.fromEntries(block.columns.map((col,i)=>[col,row[i]])));}
-let tapeSeq=0;
-async function refreshTape(snapshotRows) {
-  const token=++tapeSeq, cut=state.date+'|'+state.time;
-  let rows=snapshotRows || macroCache.get(cut);
-  if(!rows){
-    try {const m=await api('/api/macro?'+params());rows=[...m.series,...m.bonds];} catch {return;}
-  }
-  if(token!==tapeSeq)return;
-  macroCache.set(cut,rows);ticker(rows);$('tapeStatus').textContent='';
-  if(state.mode==='demo'||state.date!==marketDay||state.time||document.hidden)return;
-  const times={};
-  try {
-    const codes=rows.filter(s=>s.code!=='KEY'&&!s.board).map(s=>s.code);
-    const m=await official('engines/stock/markets/index/securities',{securities:codes.join(','),'iss.only':'marketdata','marketdata.columns':'SECID,CURRENTVALUE,LASTVALUE,TRADEDATE,UPDATETIME'});
-    const market=issRows(m.marketdata);
-    const updated=rows.map(s=>{
-      const q=market.find(r=>r.SECID===s.code&&r.TRADEDATE===marketDay&&Number.isFinite(r.CURRENTVALUE));
-      if(!q)return s;
-      times[s.code]=q.UPDATETIME;return {...s,day:q.TRADEDATE,value:q.CURRENTVALUE,previous:q.LASTVALUE};
-    });
-    if(token===tapeSeq&&cut===state.date+'|'+state.time)ticker(updated,times);
-  } catch { if(token===tapeSeq)$('tapeStatus').textContent='ISS недоступен · архив'; }
+function issRows(block) {
+  if(!Array.isArray(block?.columns)||!Array.isArray(block.data))throw Error('Неполный ответ ISS');
+  return block.data.map(row=>Object.fromEntries(block.columns.map((col,i)=>[col,row[i]])));
 }
-setInterval(()=>{if(!document.hidden && state.date===marketDay && !state.time)refreshTape();},120000);
+const tapeCut=()=>[state.mode,state.date,state.time].join('|');
+function stopTapeFeed(){tapeView.controller?.abort();tapeView.controller=null;}
+function drawTape(){
+  const rows=tapeView.archive.map(s=>{
+    const key=marketKey(s.board,s.code), current=tapeView.byKey.get(key);
+    return current?{...s,previous:s.day<current.day?s.value:s.previous,...current}:s;
+  });
+  ticker(rows);
+}
+function tapeTrade(q,day){
+  // The marketdata block has no trade date for bonds. Use only a positive
+  // session trade count and a same-day exchange snapshot for batched quotes.
+  if(!/^\d{2}:\d{2}:\d{2}$/.test(q.TIME||'')||q.NUMTRADES<=0||!Number.isFinite(q.NUMTRADES)
+    ||!Number.isFinite(q.LAST)||q.SYSTIME?.slice(0,10)!==day||q.TIME>q.SYSTIME.slice(11,19))return null;
+  return {day,time:q.TIME,value:q.LAST};
+}
+async function refreshTape(snapshotRows) {
+  const cut=tapeCut();
+  if(cut!==tapeView.cut){stopTapeFeed();tapeView.cut=cut;tapeView.archive=[];tapeView.byKey.clear();drawTape();}
+  if(tapeView.controller)return;
+  const controller=tapeView.controller=new AbortController(),signal=controller.signal;
+  const active=()=>!signal.aborted&&cut===tapeCut();
+  try{
+    let rows=snapshotRows||macroCache.get(cut);
+    if(!rows){
+      const m=await api('/api/macro?'+params());rows=[...m.series,...m.bonds];
+    }
+    if(!active())return;
+    macroCache.set(cut,rows);tapeView.archive=rows;drawTape();
+    const status=$('tapeStatus');
+    if(!canStream()||document.hidden){status.textContent='Архив';return;}
+    const day=state.date, groups=new Map();
+    for(const row of rows.filter(s=>s.board)){
+      if(!groups.has(row.board))groups.set(row.board,[]);
+      groups.get(row.board).push(row.code);
+    }
+    const batches=[...groups].map(async ([board,codes])=>{
+      const doc=await official(marketPath(board),{securities:codes.join(','),'iss.only':'marketdata',
+        'marketdata.columns':'SECID,BOARDID,LAST,NUMTRADES,TIME,SYSTIME'},signal);
+      if(!active()||!canStream())return;
+      const card=bondFeed?.key;
+      for(const q of issRows(doc.marketdata)){
+        const key=marketKey(board,q.SECID), price=tapeTrade(q,day);
+        if(q.BOARDID!==board||!codes.includes(q.SECID)||key===card||!price)continue;
+        const previous=tapeView.byKey.get(key);
+        if(!previous||day+' '+price.time>=previous.day+' '+previous.time)tapeView.byKey.set(key,price);
+      }
+    });
+    const codes=rows.filter(s=>s.code!=='KEY'&&!s.board).map(s=>s.code);
+    if(codes.length)batches.push((async()=>{
+      const doc=await official('engines/stock/markets/index/securities',{securities:codes.join(','),'iss.only':'marketdata',
+        'marketdata.columns':'SECID,CURRENTVALUE,LASTVALUE,TRADEDATE,UPDATETIME'},signal);
+      if(!active()||!canStream())return;
+      for(const r of issRows(doc.marketdata)){
+        if(codes.includes(r.SECID)&&r.TRADEDATE===day&&Number.isFinite(r.CURRENTVALUE))
+          tapeView.byKey.set(marketKey(undefined,r.SECID),{day,value:r.CURRENTVALUE,previous:r.LASTVALUE,time:r.UPDATETIME});
+      }
+    })());
+    const results=await Promise.allSettled(batches);
+    if(active()){
+      drawTape();
+      status.textContent=results.some(r=>r.status==='rejected')?'Часть данных ISS недоступна · последняя доступная цена':'MOEX ISS · задержка потока 15 мин';
+    }
+  }catch{if(active())$('tapeStatus').textContent='Источник недоступен';}
+  finally{if(tapeView.controller===controller)tapeView.controller=null;}
+}
 const chartCache=new Map();
-async function extendChart(item){
-  if(state.mode==='demo')return;
-  if(!item.board)return;
-  const end=state.time||state.date===marketDay?dtadd(state.date,-1):state.date;
-  const path='history/engines/stock/markets/bonds/boards/'+encodeURIComponent(item.board)+'/securities/'+encodeURIComponent(item.bond.secid);
+function stopBondFeed(){
+  bondFeed?.controller.abort();
+  bondFeed=null;
+}
+function startBondFeed(item){
+  if(item.request!==seq||state.tab!=='market'||document.hidden||state.mode==='demo'||!item.board)return;
+  if(bondFeed?.item===item)return;
+  stopBondFeed();
+  const feed=bondFeed={item,key:marketKey(item.board,item.bond.secid),live:canStream(),controller:new AbortController()};
+  if(canStream()){
+    // The open card takes precedence over batched quotes for this exact board.
+    if(tapeCut()===tapeView.cut){
+      const confirmed=item.exchangeTrade;
+      if(confirmed)tapeView.byKey.set(feed.key,{day:confirmed.TRADEDATE,time:confirmed.TRADETIME,value:confirmed.PRICE});
+      else tapeView.byKey.delete(feed.key);
+      drawTape();
+    }
+    refreshBondSession(feed);
+  }
+  if(!item.historyLoaded)extendChart(feed);
+}
+const activeBond=feed=>bondFeed===feed&&feed.item.request===seq&&!feed.controller.signal.aborted&&!document.hidden;
+function renderBondQuote(item){
+  const region=document.querySelector('#price .exchange-quote');
+  if(!region||item!==data)return;
+  const trade=item.exchangeTrade,last=item.quotes.at(-1)||item.last;
+  const price=trade?.PRICE??last?.price;
+  const timing=trade?dt(trade.TRADEDATE)+' · '+trade.TRADETIME+' МСК':last?.day?dt(last.day)+' · время сделки отсутствует':'Нет подтверждённой цены';
+  const historical=!canStream();
+  const label=state.mode==='demo'?'Архив · Demo':historical?'Архив на дату анализа':
+    item.sessionStatus??(item.board?'Загрузка торговой сессии…':'Режим торгов отсутствует');
+  const history=item.historyState==='error'?' · история ISS недоступна':item.historyState==='loading'?' · загружается история':
+    !item.quotes.length?(item.historyLoaded||state.mode==='demo'?' · нет истории за выбранный период':' · нет сохранённой истории'):'';
+  const source=trade?link('https://iss.moex.com/iss/'+marketPath(item.board,item.bond.secid)+'/trades.json?reversed=1&limit=1','Журнал сделок MOEX ISS'):'';
+  const html='<strong>'+esc(price==null?'—':fmt(price,4)+' % ном.')+'</strong><span>'+esc(timing)+'</span><small>'+esc(label+history)+'</small>'+source;
+  if(region.innerHTML!==html)region.innerHTML=html;
+}
+const sessionDate=r=>r.TRADE_SESSION_DATE||r.TRADEDATE;
+const samePrice=(a,b)=>Math.abs(a-b)<1e-8;
+function applyBondRows(item,rows){
+  if(!rows.length)return;
+  const all=new Map(item.quotes.map(r=>[r.day,r]));
+  for(const row of rows)all.set(row.day,{...all.get(row.day),...row});
+  item.quotes=[...all.values()].sort((a,b)=>a.day.localeCompare(b.day));
+  document.querySelector('#price exchange-chart')?.refreshRows?.();
+}
+function sessionRow(c,day,trade,item){
+  return {day,price:c.close,open:c.open,high:c.high,low:c.low,quantity:c.volume,volume:c.value,
+    currency:trade.CURRENCYID||item.exchangeCurrency||item.last?.currency||item.terms?.settlement_currency,
+    board:item.board};
+}
+async function refreshBondSession(feed){
+  if(!activeBond(feed)||!canStream()||feed.syncing)return;
+  feed.syncing=true;
+  const {item}=feed, day=state.date, signal=feed.controller.signal, path=marketPath(item.board,item.bond.secid);
+  try{
+    const [deals,daily]=await Promise.all([
+      official(path+'/trades',{reversed:1,limit:1,'iss.only':'trades'},signal),
+      official(path+'/candles',{interval:24,from:day,till:day,'iss.only':'candles'},signal)
+    ]);
+    if(!activeBond(feed)||!canStream())return;
+    const trade=issRows(deals.trades).find(r=>r.BOARDID===item.board&&r.SECID===item.bond.secid
+      &&r.TRADEDATE<=day&&/^\d{4}-\d\d-\d\d$/.test(r.TRADEDATE||'')&&/^\d\d:\d\d:\d\d$/.test(r.TRADETIME||'')&&Number.isFinite(r.PRICE));
+    const candle=issRows(daily.candles).find(r=>r.begin?.slice(0,10)===day);
+    if(!trade||sessionDate(trade)!==day){
+      item.sessionStatus=candle?'ISS · ожидается подтверждение последней сделки':'ISS · за текущую сессию сделок нет';
+      if(trade && (!item.quotes.length||trade.TRADEDATE>=item.quotes.at(-1).day) && !item.exchangeTrade)item.exchangeTrade=trade;
+    } else if(!candle || ![candle.open,candle.high,candle.low,candle.close].every(Number.isFinite) || !samePrice(candle.close,trade.PRICE)){
+      item.sessionStatus='ISS · свеча и журнал сделок синхронизируются';
+    } else if(!item.exchangeTrade||sessionDate(item.exchangeTrade)!==day||trade.TRADENO>=item.exchangeTrade.TRADENO){
+      const currency=archiveCurrency(item);
+      if(currency)item.exchangeCurrency=currency;
+      item.exchangeTrade=trade;item.sessionStatus='MOEX ISS · задержка публичного потока 15 мин';
+      applyBondRows(item,[sessionRow(candle,day,trade,item)]);
+      if(tapeCut()===tapeView.cut){
+        tapeView.byKey.set(feed.key,{day:trade.TRADEDATE,time:trade.TRADETIME,value:trade.PRICE});drawTape();
+      }
+    }
+    if(item.chartInterval && intraIntervals[item.chartInterval])await fetchIntraday(feed);
+  }catch{
+    if(activeBond(feed))item.sessionStatus='ISS недоступен · последние подтверждённые данные';
+  }finally{
+    feed.syncing=false;
+    if(activeBond(feed))renderBondQuote(item);
+  }
+}
+function archiveCurrency(item){
+  return item.last?.currency||item.quotes.find(r=>r.currency)?.currency||item.terms?.settlement_currency;
+}
+async function fetchIntraday(feed){
+  if(!activeBond(feed)||!canStream()||feed.minutesPending)return;
+  const {item}=feed,day=state.date, signal=feed.controller.signal;
+  feed.minutesPending=true;item.minuteStatus='Загрузка минутных свечей…';
+  document.querySelector('#price exchange-chart')?.refreshRows?.();
+  try{
+    const doc=await official(marketPath(item.board,item.bond.secid)+'/candles',{interval:1,from:day,till:day,'iss.only':'candles'},signal);
+    if(!activeBond(feed)||!canStream())return;
+    const rows=issRows(doc.candles).filter(c=>c.begin?.slice(0,10)===day&&[c.open,c.high,c.low,c.close].every(Number.isFinite)).map(c=>({
+      time:Date.parse(c.begin.replace(' ','T')+'+03:00')/1000,open:c.open,high:c.high,low:c.low,close:c.close,
+      quantity:c.volume,turnover:c.value
+    })).filter(r=>Number.isFinite(r.time)).sort((a,b)=>a.time-b.time);
+    const trade=item.exchangeTrade, last=rows.at(-1);
+    if(last&&trade&&sessionDate(trade)===day&&!samePrice(last.close,trade.PRICE)){
+      item.minuteStatus='ISS · минутные свечи и журнал сделок синхронизируются';
+      if(!item.minutes?.length)item.minutes=rows;
+    }else{
+      item.minutes=rows;item.minuteStatus=rows.length?'':'ISS · за текущую сессию сделок нет';
+    }
+  }catch{if(activeBond(feed))item.minuteStatus='Минутные свечи ISS недоступны';}
+  finally{
+    feed.minutesPending=false;
+    if(activeBond(feed))document.querySelector('#price exchange-chart')?.refreshRows?.();
+  }
+}
+function requestBondInterval(interval){
+  if(!data)return;
+  data.chartInterval=interval;
+  if(intraIntervals[interval]&&bondFeed?.item===data)fetchIntraday(bondFeed);
+}
+async function extendChart(feed){
+  const {item}=feed;
+  const end=state.time||canStream()?dtadd(state.date,-1):state.date;
+  const path='history/'+marketPath(item.board,item.bond.secid);
   const key=[path,item.start,end].join('|');
+  item.historyState='loading';renderBondQuote(item);
   try{
     let rows=chartCache.get(key);
     if(!rows){
       rows=[];
       for(let offset=0; ;){
-        const j=await official(path,{from:item.start,till:end,start:offset,'iss.only':'history,history.cursor','history.columns':'TRADEDATE,OPEN,HIGH,LOW,CLOSE,VALUE,VOLUME,NUMTRADES,YIELDCLOSE,ACCINT,COUPONVALUE,COUPONPERCENT,CURRENCYID,FACEUNIT,TRADINGSESSION'});
-        const block=issRows(j.history);rows.push(...block.filter(r=>r.TRADINGSESSION==null||r.TRADINGSESSION===3));offset+=block.length;
+        const j=await official(path,{from:item.start,till:end,start:offset,'iss.only':'history,history.cursor','history.columns':'TRADEDATE,OPEN,HIGH,LOW,CLOSE,VALUE,VOLUME,NUMTRADES,YIELDCLOSE,ACCINT,COUPONVALUE,COUPONPERCENT,CURRENCYID,FACEUNIT,TRADINGSESSION'},feed.controller.signal);
+        const block=issRows(j.history);rows.push(...block.filter(r=>r.TRADINGSESSION==null||String(r.TRADINGSESSION)==='3'));offset+=block.length;
         if(!block.length||offset>=(j['history.cursor']?.data[0]?.[1]??offset))break;
       }
       chartCache.set(key,rows);
     }
-    if(data!==item||!rows.length)return;
-    const all=new Map(item.quotes.map(r=>[r.day,r]));
-    for(const r of rows){if(r.TRADEDATE<=end && r.NUMTRADES>0 && Number.isFinite(r.CLOSE))all.set(r.TRADEDATE,{day:r.TRADEDATE,price:r.CLOSE,open:r.OPEN,high:r.HIGH,low:r.LOW,quantity:r.VOLUME,volume:r.VALUE,trades:r.NUMTRADES,yield_close:r.YIELDCLOSE,currency:r.CURRENCYID,board:item.board});}
-    item.quotes=[...all.values()].sort((a,b)=>a.day.localeCompare(b.day));
-    const observed=rows.filter(r=>r.TRADEDATE<=end && r.ACCINT!=null).at(-1);
+    if(!activeBond(feed))return;
+    const prices=rows.filter(r=>r.TRADEDATE>=item.start&&r.TRADEDATE<=end&&r.NUMTRADES>0&&Number.isFinite(r.CLOSE));
+    applyBondRows(item,prices.map(r=>({day:r.TRADEDATE,price:r.CLOSE,open:r.OPEN,high:r.HIGH,low:r.LOW,
+      quantity:r.VOLUME,volume:r.VALUE,trades:r.NUMTRADES,yield_close:r.YIELDCLOSE,currency:r.CURRENCYID,board:item.board})));
+    const observed=rows.filter(r=>r.TRADEDATE<=end&&r.ACCINT!=null).at(-1);
     if(observed&&(!item.terms||observed.TRADEDATE>item.terms.seen.slice(0,10))){
       item.terms={seen:observed.TRADEDATE,board:item.board,trade_day:observed.TRADEDATE,accrued:observed.ACCINT,
         settlement_currency:observed.CURRENCYID,currency:observed.FACEUNIT,coupon:observed.COUPONVALUE,rate:observed.COUPONPERCENT,
         source:'https://iss.moex.com/iss/'+path+'.json?from='+observed.TRADEDATE+'&till='+observed.TRADEDATE};
       if($('coupons'))$('coupons').outerHTML=couponPanel(item);
     }
-    if($('price'))$('price').outerHTML=price();
     const extra=$('issueSeries');if(extra)extra.outerHTML=extraAnalytics(item);
-  }catch{ /* Keep the archived chart when the exchange is unreachable. */ }
+    item.historyLoaded=true;item.historyState='ready';
+  }catch{if(activeBond(feed))item.historyState='error';}
+  finally{if(activeBond(feed))renderBondQuote(item);}
 }
+function refreshVisibleMarket(){
+  if(document.hidden)return;
+  if(canStream())refreshTape();
+  if(!canStream()&&bondFeed?.live){
+    tapeView.byKey.clear();
+    load();return;
+  }
+  if(data?.request===seq&&state.tab==='market'){
+    const previous=bondFeed;
+    startBondFeed(data);
+    if(bondFeed&&bondFeed===previous)refreshBondSession(bondFeed);
+  }
+}
+setInterval(refreshVisibleMarket,livePollMs);
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){stopBondFeed();stopTapeFeed();}
+  else refreshVisibleMarket();
+});
 function couponPanel(item){
   const t=item.terms, plan=item.plans.find(p=>p.bond===item.bond.id && p.kind==='Купон');
   const currentCoupon=t?.due>=state.date?t:null;
@@ -208,7 +400,7 @@ function financialPanel(reports,selectedPeriod){
   const fiscalEnd=period=>period.length===4?period+'-12-31':period.endsWith('H1')?period.slice(0,4)+'-06-30':period.endsWith('M9')?period.slice(0,4)+'-09-30':period.slice(0,4)+['-03-31','-06-30','-09-30','-12-31'][Number(period.at(-1))-1];
   const history=key?reports.filter(x=>x.period.length===r.period.length&&x.standard===r.standard&&x.metrics[key]?.unit===r.metrics[key].unit&&x.period<=r.period).sort((a,b)=>a.period.localeCompare(b.period)).map(x=>[fiscalEnd(x.period),x.metrics[key].value]):[];
   const options=reports.map(x=>'<option value="'+esc(x.period+'|'+x.standard)+'" '+(x.period===r.period&&x.standard===r.standard?'selected':'')+'>'+esc(x.period)+' · '+esc(x.standard)+'</option>').join('');
-  return '<section class="panel" id="fundamentals"><div class="section-head"><h3>Финансовое состояние эмитента</h3><span class="badge">'+esc(r.standard)+' · '+esc(r.period)+'</span></div><label class="minor">Отчётный период <select id="statementPeriod">'+options+'</select></label><p class="sub">Опубликован '+dt(r.published)+'</p><div class="metrics">'+metrics.map(m=>'<div><small>'+esc(m.name)+'</small><strong>'+fmt(m.value)+' '+esc(m.unit)+'</strong></div>').join('')+'</div><h4>Факторы финансового риска</h4>'+
+  return '<section class="panel" id="fundamentals"><div class="section-head"><h3>Финансовое состояние эмитента</h3><span class="badge">'+esc(r.standard)+' · '+esc(r.period)+'</span></div><label class="minor">Отчётный период <select id="statementPeriod">'+options+'</select></label><p class="sub">Опубликован '+dt(r.published)+(r.publication_url?' · '+link(r.publication_url,'Дата раскрытия'):'')+'</p><div class="metrics">'+metrics.map(m=>'<div><small>'+esc(m.name)+'</small><strong>'+fmt(m.value)+' '+esc(m.unit)+'</strong></div>').join('')+'</div><h4>Факторы финансового риска</h4>'+
     (r.flags.length?'<ul>'+r.flags.map(f=>'<li>'+esc(f.text)+' <strong>'+fmt(r.metrics[f.key].value)+' '+esc(r.metrics[f.key].unit)+'</strong></li>').join('')+'</ul>':'<p class="sub">По доступным показателям заданные условия предупреждения не выполнены.</p>')+
     (history.length>1?'<h4>'+esc(r.metrics[key].name)+' · '+esc(r.metrics[key].unit)+'</h4>'+seriesPlot(history,r.metrics[key].name,r.metrics[key].unit):'')+
     '<details><summary>Показатели отчётности и коэффициенты ('+rows.length+')</summary><div class="tablewrap"><table><tbody>'+rows.map(([,m])=>'<tr><td>'+esc(m.name)+'</td><td>'+fmt(m.value,3)+' '+esc(m.unit)+'</td></tr>').join('')+'</tbody></table></div></details><div class="sourcebar">'+link(r.url,r.provider+' · финансовые показатели')+(r.original&&r.original!==r.url?link(r.original,'Отчёт эмитента'):'')+'</div></section>';

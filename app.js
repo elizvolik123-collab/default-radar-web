@@ -11,7 +11,8 @@ const link = (url,label,cls='') => '<a class="'+cls+'" href="'+safe(url)+'" targ
 const paths = {chart:'<path d="M3 3v17h18M6 14l4-5 4 3 5-7"/>',chat:'<path d="M4 4h16v12H9l-5 4z"/><path d="M8 8h8m-8 4h5"/>',search:'<circle cx="10" cy="10" r="6.5"/><path d="m15 15 5 5"/>',filter:'<path d="M3 6h7m4 0h7M3 12h11m4 0h3M3 18h3m4 0h11"/><circle cx="12" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="8" cy="18" r="2"/>',arrow:'<path d="M4 12h15m-6-6 6 6-6 6"/>',up:'<path d="M12 20V4m-7 7 7-7 7 7"/>',bond:'<path d="m3 13 6-8h12l-6 8zM3 17l4-5m0 7 4-5m0 7 4-5"/>',file:'<path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6m-6 4h6"/>',back:'<path d="M20 12H4m6-6-6 6 6 6"/>'};
 const icon = k=>'<span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true">'+(paths[k]||'')+'</svg></span>';
 document.querySelectorAll('[data-i]').forEach(e=>e.innerHTML=icon(e.dataset.i));
-const marketDay=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Moscow'}).format(new Date());
+const moscowDay=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Moscow'}).format(new Date());
+const marketDay=moscowDay();
 const initial={mode:'live',id:'',date:marketDay,tab:'market',period:30,horizon:90,week:'',event:'',point:'',section:'detail',time:'',board:'',specific:'',unit:'rub'};
 function readState(){const p=new URLSearchParams(location.search);const view=Object.fromEntries(Object.entries(initial).map(([k,v])=>[k,p.get(k)||v]));if(view.mode==='demo'&&!p.has('date'))view.date='2026-11-24';return view;}
 let state=readState(), data=null, stats=null, seq=0, searchSeq=0, offset=0, timer, loadingChat=false;
@@ -33,16 +34,17 @@ function tabs(){
   $('pageTitle').textContent=chat?'Спросить агента':'Рынок облигаций';
   $('subtitle').textContent=chat?'Разбор выпуска с опорой на первоисточники':'Выпуски, платежи и кредитные события';
   $('asof').value=state.date;$('workMode').value=state.mode;
+  if(chat)stopBondFeed();else if(data?.request===seq)startBondFeed(data);
 }
 async function load(push=false){
-  const token=++seq;save(push);tabs();notice(''); if($('screen').open)refreshScreen();
+  const token=++seq;stopBondFeed();stopTapeFeed();save(push);tabs();notice(''); if($('screen').open)refreshScreen();
   $('marketHome').innerHTML='';
   if(!state.id){
     data=null;$('detail').innerHTML='';renderChat();
     try{const m=await api('/api/market?'+params());if(token!==seq)return;marketHome(m);notice('');if(!$('catalog').classList.contains('hide'))searchList();}catch(e){notice(e.message);}
     return;
   }
-  try{const result=await api('/api/bond?'+params());if(token!==seq)return;data=result;render();refreshTape();extendChart(result);notice('');if(!$('catalog').classList.contains('hide'))searchList();}
+  try{const result=await api('/api/bond?'+params());if(token!==seq)return;data=result;data.request=token;render();refreshTape();startBondFeed(result);notice('');if(!$('catalog').classList.contains('hide'))searchList();}
   catch(e){if(token!==seq)return;data=null;$('detail').innerHTML='<p class="empty">Выберите другой выпуск или дату анализа.</p>';$('chatContext').textContent='Нет выпуска на эту дату';$('dialogue').innerHTML='';notice(e.message);}
 }
 function marketHome(m){
@@ -104,10 +106,9 @@ function overview(){
 function cashCurrency(c){return ['RUB','SUR','RUR'].includes(c)?'₽':c||'';}
 const directionClass=delta=>delta==null||delta===0?'trade-flat':delta>0?'trade-up':'trade-down';
 function chartPrice(){
-  if (!data.quotes.some(r=>Number.isFinite(r.price))) return '<p class="empty">За выбранный период нет сохранённых сделок.</p>';
   const dates=[...new Set(data.events.map(e=>e.published.slice(0,10)))].filter(day=>day>=data.start && day<=state.date);
   const docs=dates.length?'<div class="exchange-events">Публикации за период '+dates.map(day=>'<button class="textbtn" data-marker="'+esc(day)+'">'+dt(day)+'</button>').join('')+'</div>':'';
-  return '<exchange-chart data-bond-chart></exchange-chart>'+docs;
+  return '<div class="exchange-quote" role="status"></div><exchange-chart data-bond-chart></exchange-chart>'+docs;
 }
 function price(){
   const url=data.board?'https://iss.moex.com/iss/history/engines/stock/markets/bonds/boards/'+encodeURIComponent(data.board)+'/securities/'+encodeURIComponent(data.bond.secid)+'.json?from='+data.start+'&till='+state.date:data.bond.source;
@@ -163,7 +164,7 @@ function render(){
   if(!data)return;
   const list='<section class="panel"><div class="section-head"><h3>Другие выпуски эмитента</h3><button class="textbtn" data-action="search">Весь каталог →</button></div><div class="tablewrap"><table><thead><tr><th>Выпуск</th><th>ISIN</th><th>Последняя сохранённая сделка</th></tr></thead><tbody>'+data.shortlist.map(b=>'<tr><td><button data-bond="'+esc(b.id)+'">'+esc(b.name)+'</button></td><td class="mono">'+esc(b.isin)+'</td><td>'+dt(b.last_trade)+'</td></tr>').join('')+'</tbody></table></div></section>';
   $('detail').innerHTML='<button class="textbtn" data-action="home">← Обзор рынка</button>'+timeline()+overview()+expertPanel(data)+radarPanel(data.radar)+defaultEvidence(data)+paymentJournal(data)+couponPanel(data)+forecastPanel(data.forecast)+financialPanel(data.financials||[])+filingPanel(data)+'<div class="grid">'+price()+calendar()+'</div><div class="charts-more">'+payment()+documents()+'</div>'+outcomeList()+riskPanel()+news()+extraAnalytics(data)+(data.shortlist.length?list:'');
-  renderChat();
+  renderBondQuote(data);renderChat();
 }
 function docModal(id){const d=data.documents.find(x=>x.id===id);if(!d)return;state.event=id;save();modal(d.title,'<p class="meta">'+esc(d.publisher)+' · '+esc(d.kind)+'</p><p class="modalbody">'+esc(d.body)+'</p><div class="doclist"><div class="lineitem"><span>Дата события</span>'+dt(d.occurred)+'</div><div class="lineitem"><span>Опубликовано</span>'+dt(d.published)+(d.published.includes('T')?' '+esc(d.published.slice(11,16))+' МСК':' · время не указано')+'</div><div class="lineitem"><span>Сохранено</span>'+dt(d.loaded)+'</div></div><div class="drawer-actions">'+link(d.url,'Открыть первоисточник','lightbtn')+(id==='ncr'?'<a class="lightbtn" href="documents/nkr-20260407.pdf" target="_blank" rel="noopener">Сохранённый PDF ↗</a>':'')+'<button class="primary" data-ask="doc">Объяснить в чате</button></div>');}
 function detailsModal(){const b=data.bond;modal('Реквизиты выпуска','<div class="modalbody"><b>'+esc(b.name)+'</b><p>'+esc(b.issuer_name)+'</p><p>ИНН '+esc(b.inn||'не указан')+'</p><p>ISIN '+esc(b.isin||'не указан')+' · SECID '+esc(b.secid)+'</p><p>Последняя сохранённая сделка на срез — '+dt(data.last?.day)+'</p><p>Режимы с историей на срез — '+esc(data.boards.join(', ')||'нет сведений')+'</p><p class="meta">Связи с группой и поручители в справочнике не подтверждены.</p>'+link(b.source,'Справочник MOEX')+'</div>');}
