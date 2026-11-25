@@ -378,6 +378,31 @@ document.addEventListener('visibilitychange',()=>{
   if(document.hidden){stopBondFeed();stopTapeFeed();}
   else refreshVisibleMarket();
 });
+function riskExplanation(item){
+  const profile=item.expert, radar=item.radar;
+  const reasons=radar?.assessment?.length?radar.assessment:
+    [profile?.eligible===false?'Для этого типа выпуска корпоративный экспертный индекс не рассчитывается.':
+      'Данных на выбранную дату недостаточно для полной оценки.',...(radar?.gaps||[]).slice(0,1)];
+  const evidence=[...(radar?.factors||[]),...Object.values(profile?.blocks||{})];
+  const list=reasons.map(reason=>{
+    const fact=evidence.find(f=>f.reason===reason&&f.url);
+    return '<li>'+esc(reason)+(fact?' '+link(fact.url,'Источник · '+dt(fact.day)):'')+'</li>';
+  }).join('');
+  const report=item.financials?.[0];
+  let financial='Числовая отчётность эмитента на выбранную дату отсутствует.';
+  if(report){
+    const metrics=report.metrics||{};
+    const keys=[...new Set([...(report.flags||[]).map(f=>f.key),'interest_cover','current_ratio','net_leverage','ocf','total_capital_adequacy_ratio',...Object.keys(metrics)])]
+      .filter(k=>metrics[k]?.value!=null).slice(0,2);
+    const values=keys.map(k=>esc(metrics[k].name)+' — <strong>'+fmt(metrics[k].value,3)+' '+esc(metrics[k].unit)+'</strong>').join(' · ');
+    financial=esc(report.standard)+' · '+esc(report.period)+' · опубликовано '+dt(report.published)+
+      (values?'<br>'+values:'')+'<br>'+link(report.url,report.provider+' · показатели')+
+      (report.original&&report.original!==report.url?' · '+link(report.original,'Отчёт эмитента'):'');
+  }
+  return '<section class="risk-explanation"><div class="section-head"><h3>Почему такой уровень риска</h3>'+
+    '<button class="outline" data-ask="bondRadar">Разобрать с ИИ</button></div><ul>'+list+'</ul>'+
+    '<p><b>Отчётность эмитента</b><br>'+financial+'</p></section>';
+}
 function bondHighlights(item){
   const terms=item.terms;
   const planned=item.plans.filter(p=>p.bond===item.bond.id&&p.kind==='Купон'&&p.date>=state.date)

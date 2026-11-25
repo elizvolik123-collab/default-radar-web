@@ -97,7 +97,7 @@ function timeline(){
 function statusLabel(){const recent=data.registry?.[0],outcome=data.outcomes?.[0];if(outcome&&(!data.payment||outcome.due>data.payment.date)&&(!recent||outcome.due>recent.due))return [(outcome.late?'Просрочка':'Выплата в срок')+' · '+dt(outcome.due,false),outcome.late?'red':'green'];if(recent && (!data.payment||recent.due>data.payment.date))return [recent.status+' · '+dt(recent.due,false),'red'];if(data.payment)return [data.payment.status,data.payment.status.includes('опозданием')?'amber':'green'];const ev=data.events.find(x=>x.kind==='Просрочка');return ev?['Нарушение срока','amber']:data.events.some(x=>x.kind==='Рейтинг')?['Есть рейтинговый сигнал','amber']:['Исполнение не подтверждено',''];}
 function overview(){
   const b=data.bond,[label,color]=statusLabel(), next=data.next;
-  return '<div class="panel bond-summary"><div class="card-title"><div class="identity"><div class="emblem">'+icon('bond')+'</div><div><h2>'+esc(b.name)+'</h2><div class="mono">'+esc(b.isin||b.secid)+'</div></div></div><span class="badge '+color+'">'+esc(label)+'</span></div>'+bondHighlights(data)+'<div class="metrics">'+[
+  return '<div class="panel bond-summary"><div class="card-title"><div class="identity"><div class="emblem">'+icon('bond')+'</div><div><h2>'+esc(b.name)+'</h2><div class="mono">'+esc(b.isin||b.secid)+'</div></div></div><span class="badge '+color+'">'+esc(label)+'</span></div>'+bondHighlights(data)+riskExplanation(data)+'<div class="metrics">'+[
     ['Эмитент',b.issuer_name,b.inn?'ИНН '+b.inn:'ИНН не указан'],
     ['Номинал',b.nominal!=null?fmt(b.nominal)+' '+(cashCurrency(b.currency)):'—',b.nominal==null?'Нет данных на срез':'На одну облигацию'],
     ['Погашение',dt(b.maturity),b.maturity?'По параметрам выпуска':'Нет данных на срез'],
@@ -219,9 +219,13 @@ async function ask(q,choiceId=''){
   finally{loadingChat=false;$('askForm').querySelector('button').disabled=false;renderChat();if(state.tab==='chat')dialogue.scrollTop=dialogue.scrollHeight;}
 }
 function askFrom(section){
+  if(section==='bondRadar'&&(loadingChat||!data||data.bond.id!==state.id))return;
   quitModal();state.tab='chat';state.specific='1';state.section=section==='doc'?'events':section;save(true);tabs();renderChat();
   const prompts={price:'Почему изменилась цена '+(state.point?'за '+dt(state.point):'за выбранный период')+'?',calendar:'Какие обязательства эмитента наступают до выплаты купона по выбранному выпуску?',payment:'Какая часть купона выплачена в установленный срок и когда погашена задолженность?',events:'Какие признаки ухудшения и события уже были известны?',doc:'Объясни документ «'+(data.documents.find(d=>d.id===state.event)?.title||'')+'»'};
-  ask(prompts[section]);
+  if(section==='bondRadar'){
+    const id=data.bond.id;
+    ask('Разбери выпуск '+(data.bond.isin||id)+'. Почему присвоен этот уровень риска? Объясни риск ближайшего платежа с цифрами из отчётности и ссылками на источники.',id);
+  }else ask(prompts[section]);
 }
 async function searchList(){
   const token=++searchSeq,p=params();for(const [k,v] of Object.entries({q:$('query').value,issuer:$('issuer').value,currency:$('currency').value,status:$('status').value,event_filter:$('eventFilter').checked?'1':'',offset}))p.set(k,v);

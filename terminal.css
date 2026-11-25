@@ -181,3 +181,7 @@ body:has(#market:not(.hide)) { background-color:var(--paper); background-image:r
 .bond-highlights dd {margin:6px 0;color:var(--ink);font-weight:650;font-size:clamp(16px,1.6vw,23px);line-height:1.23;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;}
 @media(max-width:850px){.bond-highlights{grid-template-columns:repeat(2,minmax(0,1fr));}}
 html[data-theme=light] #market .macro-card[aria-pressed=true] {border-color:#5d6b6b;background-color:#ddd3d3;}
+.risk-explanation { padding:14px 0; margin:12px 0; border-block:1px solid var(--line); }
+.risk-explanation .section-head { flex-wrap:wrap; gap:8px; }
+.risk-explanation ul { padding-left:1.25rem; }
+.risk-explanation p,.risk-explanation li { line-height:1.55; }
