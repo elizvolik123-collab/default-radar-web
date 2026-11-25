@@ -217,6 +217,14 @@ function sessionRow(c,day,trade,item){
     currency:trade.CURRENCYID||item.exchangeCurrency||item.last?.currency||item.terms?.settlement_currency,
     board:item.board};
 }
+function sessionFromMinutes(rows,trade){
+  const last=rows.at(-1);
+  const minute=Date.parse(trade.TRADEDATE+'T'+trade.TRADETIME.slice(0,5)+':00+03:00')/1000;
+  if(!last||last.time!==minute||!samePrice(last.close,trade.PRICE))return null;
+  const sum=field=>rows.every(row=>Number.isFinite(row[field]))?rows.reduce((total,row)=>total+row[field],0):null;
+  return {open:rows[0].open,high:Math.max(...rows.map(row=>row.high)),low:Math.min(...rows.map(row=>row.low)),
+    close:last.close,volume:sum('quantity'),value:sum('turnover')};
+}
 async function refreshBondSession(feed){
   if(!activeBond(feed)||!canStream()||feed.syncing)return;
   feed.syncing=true;
@@ -229,22 +237,30 @@ async function refreshBondSession(feed){
     if(!activeBond(feed)||!canStream())return;
     const trade=issRows(deals.trades).find(r=>r.BOARDID===item.board&&r.SECID===item.bond.secid
       &&r.TRADEDATE<=day&&/^\d{4}-\d\d-\d\d$/.test(r.TRADEDATE||'')&&/^\d\d:\d\d:\d\d$/.test(r.TRADETIME||'')&&Number.isFinite(r.PRICE));
-    const candle=issRows(daily.candles).find(r=>r.begin?.slice(0,10)===day);
-    if(!trade||sessionDate(trade)!==day){
+    let candle=issRows(daily.candles).find(r=>r.begin?.slice(0,10)===day);
+    const current=trade&&sessionDate(trade)===day;
+    let minutes, derived=false;
+    if(current&&(!candle||![candle.open,candle.high,candle.low,candle.close].every(Number.isFinite)||!samePrice(candle.close,trade.PRICE))){
+      minutes=await minuteCandles(feed);
+      if(!activeBond(feed)||!canStream())return;
+      candle=sessionFromMinutes(minutes,trade);
+      derived=Boolean(candle);
+    }
+    if(!current){
       item.sessionStatus=candle?'ISS · ожидается подтверждение последней сделки':'ISS · за текущую сессию сделок нет';
       if(trade && (!item.quotes.length||trade.TRADEDATE>=item.quotes.at(-1).day) && !item.exchangeTrade)item.exchangeTrade=trade;
-    } else if(!candle || ![candle.open,candle.high,candle.low,candle.close].every(Number.isFinite) || !samePrice(candle.close,trade.PRICE)){
+    } else if(!candle){
       item.sessionStatus='ISS · свеча и журнал сделок синхронизируются';
     } else if(!item.exchangeTrade||sessionDate(item.exchangeTrade)!==day||trade.TRADENO>=item.exchangeTrade.TRADENO){
       const currency=archiveCurrency(item);
       if(currency)item.exchangeCurrency=currency;
-      item.exchangeTrade=trade;item.sessionStatus='MOEX ISS · задержка публичного потока 15 мин';
+      item.exchangeTrade=trade;item.sessionStatus='MOEX ISS · задержка публичного потока 15 мин'+(derived?' · дневная свеча по минутным данным':'');
       applyBondRows(item,[sessionRow(candle,day,trade,item)]);
       if(tapeCut()===tapeView.cut){
         tapeView.byKey.set(feed.key,{day:trade.TRADEDATE,time:trade.TRADETIME,value:trade.PRICE});drawTape();
       }
     }
-    if(item.chartInterval && intraIntervals[item.chartInterval])await fetchIntraday(feed);
+    if(item.chartInterval && intraIntervals[item.chartInterval])await fetchIntraday(feed,minutes);
   }catch{
     if(activeBond(feed))item.sessionStatus='ISS недоступен · последние подтверждённые данные';
   }finally{
@@ -255,18 +271,39 @@ async function refreshBondSession(feed){
 function archiveCurrency(item){
   return item.last?.currency||item.quotes.find(r=>r.currency)?.currency||item.terms?.settlement_currency;
 }
-async function fetchIntraday(feed){
+function minuteCandles(feed){
+  if(feed.minuteRequest)return feed.minuteRequest;
+  const day=state.date,{item,controller}=feed,path=marketPath(item.board,item.bond.secid)+'/candles';
+  feed.minuteRequest=(async()=>{
+    const bars=new Map();
+    let start=0;
+    while(true){
+      const doc=await official(path,{interval:1,from:day,till:day,start,'iss.only':'candles'},controller.signal);
+      const batch=issRows(doc.candles);
+      if(!batch.length)break;
+      const count=bars.size;
+      for(const c of batch){
+        if(c.begin?.slice(0,10)!==day||![c.open,c.high,c.low,c.close].every(Number.isFinite))continue;
+        const time=Date.parse(c.begin.replace(' ','T')+'+03:00')/1000;
+        if(Number.isFinite(time))bars.set(time,{time,open:c.open,high:c.high,low:c.low,close:c.close,quantity:c.volume,turnover:c.value});
+      }
+      if(bars.size===count)throw Error('ISS returned an incomplete minute series');
+      // ISS candle responses have no cursor, and a full page contains 500 rows.
+      if(batch.length<500)break;
+      start+=batch.length;
+    }
+    return [...bars.values()].sort((a,b)=>a.time-b.time);
+  })().finally(()=>{feed.minuteRequest=null;});
+  return feed.minuteRequest;
+}
+async function fetchIntraday(feed,sampled){
   if(!activeBond(feed)||!canStream()||feed.minutesPending)return;
-  const {item}=feed,day=state.date, signal=feed.controller.signal;
+  const {item}=feed,day=state.date;
   feed.minutesPending=true;item.minuteStatus='Загрузка минутных свечей…';
   document.querySelector('#price exchange-chart')?.refreshRows?.();
   try{
-    const doc=await official(marketPath(item.board,item.bond.secid)+'/candles',{interval:1,from:day,till:day,'iss.only':'candles'},signal);
+    const rows=sampled??await minuteCandles(feed);
     if(!activeBond(feed)||!canStream())return;
-    const rows=issRows(doc.candles).filter(c=>c.begin?.slice(0,10)===day&&[c.open,c.high,c.low,c.close].every(Number.isFinite)).map(c=>({
-      time:Date.parse(c.begin.replace(' ','T')+'+03:00')/1000,open:c.open,high:c.high,low:c.low,close:c.close,
-      quantity:c.volume,turnover:c.value
-    })).filter(r=>Number.isFinite(r.time)).sort((a,b)=>a.time-b.time);
     const trade=item.exchangeTrade, last=rows.at(-1);
     if(last&&trade&&sessionDate(trade)===day&&!samePrice(last.close,trade.PRICE)){
       item.minuteStatus='ISS · минутные свечи и журнал сделок синхронизируются';
