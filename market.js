@@ -31,8 +31,11 @@ function marketDashboard(m) {
   const points=row.points.filter(p=>p[0]>=dtadd(row.day,1-marketWindow));
   return '<section class="panel macro" id="macroPanel"><h2>Рыночные индикаторы</h2><div class="macro-grid">'+m.series.map(s=>
     '<button class="macro-card '+(s.code===row.code?'selected':'')+'" data-index="'+esc(s.code)+'" aria-pressed="'+(s.code===row.code)+'"><small>'+esc(s.label)+'</small><strong>'+fmt(s.value)+' '+esc(s.unit)+'</strong><span>'+esc(changeText(s))+' · '+dt(s.day,false)+'</span></button>').join('')+
-    '</div><div class="section-head"><div><h3>'+esc(row.label)+'</h3><span class="minor">'+esc(row.code)+' · '+esc(row.unit)+'</span></div><div class="seg">'+[30,90,365,730].map(n=>'<button data-market-days="'+n+'" class="'+(n===marketWindow?'sel':'')+'">'+(n>=365?(n/365)+' г':n+' д')+'</button>').join('')+'</div></div>'+
-    seriesPlot(points,row.label,row.unit,row.code==='KEY')+'<p class="sub">'+esc(indexMeaning[row.code]||'')+'</p><div class="sourcebar">'+link(row.url,row.code==='KEY'?'Банк России':'ПАО Московская Биржа')+'<span>Данные на '+dt(row.day)+'</span></div>'+curvePanel(m.curve)+corporatePanel(m.corporate)+'</section>';
+    '</div><div class="section-head"><div><h3>'+esc(row.label)+'</h3><span class="minor">'+esc(row.code)+' · '+esc(row.unit)+'</span></div>'+
+    (row.code==='KEY'?'<div class="seg">'+[30,90,365,730].map(n=>'<button data-market-days="'+n+'" class="'+(n===marketWindow?'sel':'')+'">'+(n>=365?(n/365)+' г':n+' д')+'</button>').join('')+'</div>':'')+'</div>'+
+    (row.code==='KEY'?seriesPlot(points,row.label,row.unit,true):'<exchange-chart data-index-chart="'+esc(row.code)+'"></exchange-chart>')+
+    '<p class="sub">'+esc(indexMeaning[row.code]||'')+'</p><div class="sourcebar">'+(row.code==='KEY'?link(row.url,'Банк России'):
+      link('https://www.moex.com/ru/indices','ПАО Московская Биржа')+' '+link(row.candles_url||row.url,'Исходный ряд · '+row.code))+'<span>Данные на '+dt(row.day)+'</span></div>'+curvePanel(m.curve)+corporatePanel(m.corporate)+'</section>';
 }
 function corporatePanel(rows){
   if(!rows?.length)return '';

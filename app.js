@@ -79,7 +79,14 @@ function setDate(day){state={...state,date:day,time:'',week:'',event:'',point:''
 function sourceModal(){
   if(!stats)return;
   const logs=stats.refresh.map(x=>'<div class="docrow"><div>'+esc(x.source)+'<small>'+esc(x.error?'Последняя попытка завершилась ошибкой. '+x.error:'Сохранено '+(x.count??'—')+' записей')+'</small></div><small>'+esc(x.success?.replace('T',' ')||'нет успешной загрузки')+'</small></div>').join('');
-  modal('Источники и покрытие','<p class="meta">Последний сохранённый набор. Счётчики охватывают все даты.</p><div class="metrics">'+[['Выпуски',stats.bonds],['С котировками',stats.quotes],['С календарём',stats.plans],['С подтверждёнными исходами',stats.outcome_bonds]].map(([k,v])=>'<div><small>'+k+'</small><strong>'+fmt(v)+'</strong></div>').join('')+'</div><p class="meta">Реестр дефолтов MOEX: '+fmt(stats.registry_records)+' записей. Связано с каталогом выпусков: '+fmt(stats.registry_bonds)+'.</p><h3 class="act">Обновления по источникам</h3>'+logs+'<p class="meta">ISS и RSS биржи обновляются командой загрузки. Исторические релизы агентств и эмитентов отобраны вручную. Telegram представлен ссылками на публикации. История платежей использует сообщения эмитентов в АК&amp;М, уведомления ПВО и реестр биржи. Финансовая отчётность и судебная история в прогноз пока не входят.</p>');
+  const sources=(stats.source_registry||[]).map(s=>{
+    const count=s.count==null?'':fmt(s.count)+' '+esc(s.unit);
+    const stamp=s.latest?'Последняя запись '+dt(s.latest.slice(0,10)):'';
+    const latest=s.latest_url?link(s.latest_url,stamp):stamp;
+    return '<div class="docrow"><div>'+link(s.url,s.name)+'<small>'+esc(s.access)+'</small></div><div>'+count+'<small>'+latest+'</small></div></div>';
+  }).join('');
+  const counts=[['Выпуски',stats.bonds],['С котировками',stats.quotes],['С календарём',stats.plans],['Со свидетельствами об исходах',stats.outcome_bonds]];
+  modal('Источники и покрытие','<p class="meta">Состав архива по всем датам. Для каждого источника указаны способ получения и дата последней сохранённой записи, если она известна.</p><div class="metrics">'+counts.map(([k,v])=>'<div><small>'+k+'</small><strong>'+(v==null?'—':fmt(v))+'</strong></div>').join('')+'</div><p class="meta">В реестре нарушений биржи '+fmt(stats.registry_records)+' записей. С каталогом связано '+fmt(stats.registry_bonds)+' выпусков.</p>'+sources+'<details><summary>Журнал попыток обновления</summary>'+logs+'</details>');
 }
 function timeline(){
   return '<div class="timeline"><strong>Исторический срез</strong>'+(state.id===MAIN?presets:[]).map(v=>'<button data-date="'+v+'" class="'+(state.date===v?'sel':'')+'">'+dt(v,false)+'</button>').join('')+('<label class="minor">Время МСК <input aria-label="Время среза" type="time" id="clock" value="'+esc(state.time||'')+'"></label>')+'</div>';
@@ -95,55 +102,13 @@ function overview(){
   ].map(([k,v,n])=>'<div><small>'+esc(k)+'</small><strong>'+esc(v)+'</strong><small>'+esc(n)+'</small></div>').join('')+'</div><div class="sourcebar"><span>Срез на '+dt(state.date)+(state.time?' · '+esc(state.time):' · конец дня')+' МСК</span><div class="row-links">'+link(b.source,'Справочник выпуска')+'<button data-action="details">Реквизиты и режимы</button></div></div></div>';
 }
 function cashCurrency(c){return ['RUB','SUR','RUR'].includes(c)?'₽':c||'';}
-let chartStyle='candles', chartVolume='quantity';
 const directionClass=delta=>delta==null||delta===0?'trade-flat':delta>0?'trade-up':'trade-down';
-const hasCandle=p=>[p.open,p.high,p.low,p.price].every(Number.isFinite)&&p.low<=Math.min(p.open,p.price)&&p.high>=Math.max(p.open,p.price);
 function chartPrice(){
-  const q=data.quotes.filter(p=>Number.isFinite(p.price));
-  if(!q.length)return '<p class="empty">За выбранный период нет сохранённых сделок.</p>'+link(data.bond.source,'Данные выпуска на бирже');
-  const candleMode=chartStyle==='candles'&&q.some(hasCandle);
-  const quantity=chartVolume==='quantity'&&q.some(p=>Number.isFinite(p.quantity));
-  const axisLabel=quantity?'Объём, шт.':'Оборот, млн '+cashCurrency(q.find(p=>p.currency)?.currency);
-  const volume=p=>quantity?p.quantity:(p.volume==null?null:p.volume/1e6);
-  const maxVol=Math.max(1,...q.map(p=>volume(p)||0));
-  const min=Math.min(...q.map(p=>candleMode&&hasCandle(p)?p.low:p.price));
-  const max=Math.max(...q.map(p=>candleMode&&hasCandle(p)?p.high:p.price));
-  const pad=Math.max(.01,(max-min)*.09), lo=min-pad, hi=max+pad;
-  const start=fromDay(q[0].day),end=fromDay(q.at(-1).day);
-  const x=d=>end===start?402:68+668*(fromDay(d)-start)/(end-start);
-  const y=v=>16+145*(hi-v)/(hi-lo);
-  const width=Math.min(18,Math.max(.6,480/(end-start+1)));
-  const grid=[0,.5,1].map(t=>'<path class="trade-grid" d="M48 '+(16+t*145)+'H751"/><text x="0" y="'+(20+t*145)+'">'+fmt(hi-t*(hi-lo),2)+'</text>').join('');
-  const sign=v=>(v>0?'+':'')+fmt(v,2);
-  const describe=p=>[dt(p.day),data.board,hasCandle(p)?'Откр. '+fmt(p.open)+' · макс. '+fmt(p.high)+' · мин. '+fmt(p.low):'', 'закр. '+fmt(p.price)+'% ном.',p.quantity!=null?fmt(p.quantity)+' шт.':'',p.volume!=null?'оборот '+fmt(p.volume)+' '+cashCurrency(p.currency):'',p.trades!=null?fmt(p.trades)+' сделок':''].filter(Boolean).join(' · ');
-  let prices='',bars='',hits='';
-  q.forEach((p,i)=>{
-    const prev=q[i-1],cx=x(p.day),full=candleMode&&hasCandle(p);
-    const change=full?p.price-p.open:prev?p.price-prev.price:null;
-    const cls=directionClass(change);
-    if(full){
-      prices+='<g class="ohlc '+cls+'"><path d="M'+cx+' '+y(p.high)+'V'+y(p.low)+'"/><rect x="'+(cx-width/2)+'" y="'+Math.min(y(p.open),y(p.price))+'" width="'+width+'" height="'+Math.max(1,Math.abs(y(p.open)-y(p.price)))+'"/></g>';
-    }else{
-      if(prev&&(!candleMode||!hasCandle(prev))&&fromDay(p.day)-fromDay(prev.day)<=7)
-        prices+='<path class="close-segment '+cls+'" d="M'+x(prev.day)+' '+y(prev.price)+'L'+cx+' '+y(p.price)+'"/>';
-      prices+='<circle class="close-dot '+cls+'" cx="'+cx+'" cy="'+y(p.price)+'" r="2"/>';
-    }
-    const v=volume(p);
-    if(v!=null){const h=44*v/maxVol;bars+='<rect class="trade-volume '+cls+'" x="'+(cx-width/2)+'" y="'+(225-h)+'" width="'+width+'" height="'+h+'"/>';}
-    hits+='<rect class="trade-hit" role="button" tabindex="0" data-point="'+p.day+'" aria-label="'+esc(describe(p))+'" x="'+(cx-Math.max(width,5)/2)+'" y="10" width="'+Math.max(width,5)+'" height="219"><title>'+esc(describe(p))+'</title></rect>';
-  });
-  const markers=[...new Set(data.events.map(e=>e.published.slice(0,10)))].filter(d=>d>=q[0].day&&d<=q.at(-1).day).map(d=>'<g role="button" tabindex="0" data-marker="'+d+'" aria-label="Документы за '+d+'"><path stroke="#bc8946" stroke-dasharray="3 4" d="M'+x(d)+' 10V161"/><circle cx="'+x(d)+'" cy="10" r="5" fill="#bc8946"/></g>').join('');
-  const active=q.find(p=>p.day===state.point)||q.at(-1),i=q.indexOf(active),pct=i&&q[i-1].price?100*(active.price/q[i-1].price-1):null;
-  const controls='<div class="seg"><button data-chart-style="candles" aria-pressed="'+candleMode+'" '+(q.some(hasCandle)?'':'disabled')+'>Свечи</button><button data-chart-style="line" aria-pressed="'+!candleMode+'">Линия</button><button data-chart-volume="quantity" aria-pressed="'+quantity+'" '+(q.some(p=>p.quantity!=null)?'':'disabled')+'>Объём, шт.</button><button data-chart-volume="value" aria-pressed="'+!quantity+'">Оборот</button></div>';
-  return controls+'<div class="chart-meta"><strong>'+fmt(active.price)+' %</strong>'+(pct==null?'':'<b class="'+directionClass(pct)+'">'+sign(pct)+'% к предыдущему закрытию</b>')+'</div><svg class="chart trade-chart" viewBox="0 0 770 250" aria-label="Дневные торги, цена в процентах номинала и объём">'+grid+prices+'<text x="2" y="182">'+esc(axisLabel)+'</text><text x="2" y="200">'+fmt(maxVol,1)+'</text><path class="trade-grid" d="M48 225H751"/>'+bars+'<text x="48" y="246">'+dt(q[0].day,false)+'</text><text x="751" y="246" text-anchor="end">'+dt(q.at(-1).day,false)+'</text>'+hits+markers+'</svg><p class="sub">'+esc(describe(active))+'</p>';
+  if (!data.quotes.some(r=>Number.isFinite(r.price))) return '<p class="empty">За выбранный период нет сохранённых сделок.</p>';
+  const dates=[...new Set(data.events.map(e=>e.published.slice(0,10)))].filter(day=>day>=data.start && day<=state.date);
+  const docs=dates.length?'<div class="exchange-events">Публикации за период '+dates.map(day=>'<button class="textbtn" data-marker="'+esc(day)+'">'+dt(day)+'</button>').join('')+'</div>':'';
+  return '<exchange-chart data-bond-chart></exchange-chart>'+docs;
 }
-document.addEventListener('click',e=>{
-  const control=e.target.closest('[data-chart-style],[data-chart-volume]');
-  if(!control||!data)return;
-  if(control.dataset.chartStyle)chartStyle=control.dataset.chartStyle;
-  if(control.dataset.chartVolume)chartVolume=control.dataset.chartVolume;
-  $('price').outerHTML=price();
-});
 function price(){
   const url=data.board?'https://iss.moex.com/iss/history/engines/stock/markets/bonds/boards/'+encodeURIComponent(data.board)+'/securities/'+encodeURIComponent(data.bond.secid)+'.json?from='+data.start+'&till='+state.date:data.bond.source;
   return '<article class="panel focus-section" id="price"><div class="section-head"><h3>Цена и объём торгов</h3><div class="seg">'+[7,14,30,90,180,365,36500].map(n=>'<button data-period="'+n+'" class="'+(+state.period===n?'sel':'')+'">'+(n===36500?'Вся история':n===365?'1 г':n+' д')+'</button>').join('')+'</div></div>'+chartPrice()+(data.boards.length>1?'<label class="minor">Режим торгов <select id="boardSelect">'+data.boards.map(v=>'<option '+(v===data.board?'selected':'')+'>'+esc(v)+'</option>').join('')+'</select></label>':'')+'<div class="sourcebar">'+link(url,'MOEX ISS'+(data.board?' · '+data.board:''))+'<button class="textbtn" data-ask="price">Объяснить в чате →</button></div></article>';

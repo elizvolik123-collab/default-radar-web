@@ -25,6 +25,8 @@ CREATE INDEX IF NOT EXISTS reports_issuer ON reports(issuer,published);
 CREATE TABLE IF NOT EXISTS report_editions(issuer TEXT,period TEXT,standard TEXT,published TEXT,ticker TEXT,
  url TEXT,original TEXT,metrics TEXT,observed TEXT,PRIMARY KEY(issuer,period,standard,observed));
 CREATE TABLE IF NOT EXISTS series(code TEXT,day TEXT,value REAL,label TEXT,unit TEXT,url TEXT,PRIMARY KEY(code,day));
+CREATE TABLE IF NOT EXISTS index_candles(code TEXT,day TEXT,open REAL,high REAL,low REAL,close REAL,turnover_rub REAL,
+ PRIMARY KEY(code,day));
 CREATE TABLE IF NOT EXISTS curve(day TEXT,years REAL,yield_pct REAL,PRIMARY KEY(day,years));
 CREATE TABLE IF NOT EXISTS corporate_yields(code TEXT,day TEXT,yield_pct REAL,duration_days INTEGER,PRIMARY KEY(code,day));
 CREATE TABLE IF NOT EXISTS terms(bond TEXT,seen TEXT,board TEXT,settle TEXT,accrued REAL,coupon REAL,
@@ -164,25 +166,43 @@ def quarters(db):
 
 
 def indices(db):
-    start = date.today()-timedelta(days=730)
-    def load(item):
-        code,label=item
-        path = f"engines/stock/markets/index/securities/{code}/candles"
-        rows = pages(path,"candles",interval=24,**{"from":start.isoformat(),"till":date.today().isoformat()})
-        batch = [(code,r["begin"][:10],r["close"],label,"п.",f"https://www.moex.com/ru/index/{code}")
-                 for r in rows if r["close"] is not None]
-        if not batch:
-            raise ValueError("Нет истории для "+code)
-        return batch
+    first = date(2014, 1, 1)
+    # ISS can return an unfinished candle for the current Moscow trading day.
+    through = datetime.now(MSK).date() - timedelta(days=1)
+    if "turnover_rub" not in {r[1] for r in db.execute("PRAGMA table_info(index_candles)")}:
+        db.execute("ALTER TABLE index_candles ADD COLUMN turnover_rub REAL")
+    latest = dict(db.execute("SELECT code,max(day) FROM index_candles GROUP BY code HAVING count(turnover_rub)>0"))
+
+    def load(code):
+        since = max(first, date.fromisoformat(latest[code]) - timedelta(days=7)) if code in latest else first
+        rows = pages(f"engines/stock/markets/index/securities/{code}/candles", "candles",
+                     interval=24, **{"from": since.isoformat(), "till": through.isoformat()})
+        candles, closes = [], []
+        for row in rows:
+            day = date.fromisoformat(row["begin"][:10])
+            o, h, l, c = (row.get(k) for k in ("open", "high", "low", "close"))
+            if c is None or not since <= day <= through:
+                continue
+            closes.append((code, day.isoformat(), c, INDICES[code], "п.", f"https://www.moex.com/ru/index/{code}"))
+            if None not in (o, h, l) and l <= min(o, c) and h >= max(o, c):
+                # VALUE is turnover of the index basket. The five RUB indices use RUB in ISS history.
+                value = row.get("value")
+                candles.append((code, day.isoformat(), o, h, l, c, value if value and value > 0 else None))
+        if not closes:
+            raise ValueError("Нет истории для " + code)
+        return closes, candles
+
     failures=[]
     with ThreadPoolExecutor(3) as pool:
-        jobs={code:pool.submit(load,(code,label)) for code,label in INDICES.items()}
+        jobs={code:pool.submit(load,code) for code in INDICES}
         for code,job in jobs.items():
-            try:batch=job.result()
+            try:closes,candles=job.result()
             except (OSError, ValueError) as exc:
                 failures.append(code);print(code,str(exc),flush=True);continue
-            with db:db.executemany("INSERT OR REPLACE INTO series VALUES(?,?,?,?,?,?)",batch)
-            print(code,len(batch),batch[-1][1],flush=True)
+            with db:
+                db.executemany("INSERT OR REPLACE INTO series VALUES(?,?,?,?,?,?)",closes)
+                db.executemany("INSERT OR REPLACE INTO index_candles VALUES(?,?,?,?,?,?,?)",candles)
+            print(code, len(candles), "OHLC", closes[0][1], closes[-1][1], flush=True)
     if failures:raise ValueError("Не получены индексы "+", ".join(failures))
 
 

@@ -5,7 +5,7 @@
   let nextId=0, failure='';
   const endpoint=document.querySelector('meta[name="radar-chat-url"]')?.content;
   const groq=document.querySelector('meta[name="radar-groq-url"]')?.content;
-  const mode=()=>endpoint?'Серверная языковая модель · ответы по источникам':groq?'Groq · GPT-OSS · ответы по источникам':'Встроенный поиск по документам и показателям · без регистрации';
+  const mode=()=>endpoint||groq?'Ассистент радара · ответы по источникам':'Встроенный поиск по документам и показателям · без регистрации';
 
   worker.onmessage = ({data}) => {
     const job = pending.get(data.id);
