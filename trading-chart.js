@@ -68,11 +68,15 @@ class ExchangeChart extends HTMLElement {
     const hasCandles=o.rows.some(validCandle);
     const hasQty=o.rows.some(r=>Number.isFinite(r.quantity)), hasValue=o.rows.some(r=>Number.isFinite(r.turnover));
     let interval=o.interval, style=hasCandles?'candles':'line', volume=hasQty?'quantity':hasValue?'turnover':'';
+    const tradedDays=new Set(o.rows.map(r=>r.time));
+    const eventDays=index?[]:[...new Set(item.events.map(e=>e.published.slice(0,10)).filter(day=>tradedDays.has(day)))].sort();
+    let showEvents=false;
     const button=(attr,value,label)=>'<button type="button" '+attr+'="'+esc(value)+'">'+esc(label)+'</button>';
     const optionGroup=(label,buttons)=>'<div class="exchange-options" role="group" aria-label="'+label+'">'+buttons+'</div>';
     this.innerHTML='<div class="exchange-toolbar">'+optionGroup('Размер одной свечи',Object.entries(intervals).map(([key,val])=>button('data-interval',key,val)).join(''))
       +optionGroup('Вид графика',(hasCandles?button('data-chart-style','candles','Свечи'):'')+button('data-chart-style','line','Линия'))
       +((hasQty||hasValue)?optionGroup('Показатель объёма',(hasQty?button('data-chart-volume','quantity','Объём, шт.'):'')+(hasValue?button('data-chart-volume','turnover',index?'Оборот бумаг, ₽':'Оборот'):'')+button('data-chart-volume','off','Скрыть')):'')
+      +(eventDays.length?optionGroup('Документы выпуска',button('data-events','toggle','Публикации')):'')
       +'<button class="exchange-fit" data-fit type="button" title="Вернуть весь период">Весь период</button></div>'
       +'<div class="exchange-shell"><div class="exchange-head"><strong>'+esc(o.name)+'</strong><span>'+esc(o.symbol)+'</span></div>'
       +'<div class="exchange-legend"></div><div class="exchange-canvas" tabindex="0" role="group" aria-label="Биржевой график. Стрелки влево и вправо для выбора периода."></div></div>'
@@ -86,7 +90,7 @@ class ExchangeChart extends HTMLElement {
       crosshair:{mode:LightweightCharts.CrosshairMode.Normal,vertLine:{color:'#91959c'},horzLine:{color:'#91959c'}},
       handleScroll:{mouseWheel:false,pressedMouseMove:true,horzTouchDrag:true,vertTouchDrag:false}
     });
-    let price,vol,closeOnly,bars,selection,byDay;
+    let price,vol,closeOnly,markers,bars,selection,byDay;
     const legendAt=i=>{
       selection=i;
       const b=bars[i], prev=bars[i-1],delta=prev?b.close-prev.close:null;
@@ -99,6 +103,7 @@ class ExchangeChart extends HTMLElement {
         +(volume && volume!=='off'?'<span>'+(volume==='quantity'?'Объём':index?'Оборот бумаг':'Оборот')+' <b>'+(Number.isFinite(b[volume])?esc(exchangeNumber.format(b[volume])+' '+(volume==='quantity'?'шт.':o.currency)):'нет данных')+'</b></span>':'');
     };
     const update=()=>{
+      markers?.detach();markers=null;
       for (const s of [price,vol,closeOnly]) if (s) chart.removeSeries(s);
       vol=null;closeOnly=null;
       bars=aggregateSessions(o.rows,interval);byDay=new Map(bars.map((b,i)=>[b.time,i]));
@@ -122,9 +127,17 @@ class ExchangeChart extends HTMLElement {
           return [{time:b.time,value:b[volume],color:(b.close===base?exchangeFlat:b.close>base?exchangeUp:exchangeDown)+'a8'}];
         }));
       }
+      if(showEvents){
+        const eventPeriods=new Set(eventDays.map(d=>periodKey(d,interval)));
+        markers=LightweightCharts.createSeriesMarkers(price,bars.filter(b=>eventPeriods.has(b.key)).map(b=>({
+          time:b.time,position:'aboveBar',color:'#e8b878',shape:'circle',text:'',size:.6
+        })));
+      }
       this.querySelectorAll('button:not([data-fit])').forEach(el=>el.setAttribute('aria-pressed',String(
-        el.dataset.interval===interval || el.dataset.chartStyle===style || el.dataset.chartVolume===volume)));
-      chart.timeScale().fitContent();
+        el.dataset.interval===interval || el.dataset.chartStyle===style || el.dataset.chartVolume===volume || (el.hasAttribute('data-events') && showEvents))));
+      if(index && interval!=='month' && bars.length>120){
+        chart.timeScale().setVisibleLogicalRange({from:bars.length-120,to:bars.length+2});
+      }else chart.timeScale().fitContent();
       this.dataset.ready='true';this.dataset.bars=String(bars.length);this.dataset.ohlc=String(candleMode);
       this.querySelector('.exchange-range').textContent=intervals[interval]+' · '+bars.length+' периодов · '+dateLabel(o.rows[0].time)+' – '+dateLabel(o.rows.at(-1).time);
       legendAt(bars.length-1);
@@ -144,6 +157,7 @@ class ExchangeChart extends HTMLElement {
     this.onclick=e=>{
       const el=e.target.closest('button');if(!el)return;
       if(el.hasAttribute('data-fit')){chart.timeScale().fitContent();return;}
+      if(el.hasAttribute('data-events'))showEvents=!showEvents;
       interval=el.dataset.interval||interval;style=el.dataset.chartStyle||style;volume=el.dataset.chartVolume||volume;
       update();
     };
