@@ -93,7 +93,11 @@ function initPaymentCalendar(root){
       function select(day){
         selected=day;
         for(const b of content.querySelectorAll('[data-day]'))b.setAttribute('aria-pressed',String(b.dataset.day===day));
-        content.querySelector('.cal-list').innerHTML='<h3>'+dt(day)+' · по графику</h3>'+((days.get(day)||[]).map(p=>'<div class="docrow"><div><button data-bond="'+esc(p.id)+'">'+esc(p.name)+'</button><small>'+esc(p.kind)+'</small></div>'+link(p.source,'График выплат')+'</div>').join('')||'<p>В каталоге нет плановых выплат на эту дату.</p>');
+        const labels={planned:'Запланирован',ontime:'Выплачен в срок',late:'Просрочка',unconfirmed:'Нет подтверждения'};
+        content.querySelector('.cal-list').innerHTML='<h3>'+dt(day)+'</h3>'+((days.get(day)||[]).map(p=>{
+          const evidence=p.evidence.map(e=>link(e.url,'Документ · '+dt(e.published))).join(' ');
+          return '<article class="cal-payment"><div><button data-bond="'+esc(p.id)+'">'+esc(p.name)+'</button><small>'+esc(p.kind)+' · '+esc(p.id)+'</small></div><strong class="pay-state '+p.status+'">'+labels[p.status]+'</strong><p>'+(p.actual?'Фактическая дата выплаты · '+dt(p.actual):p.conflict?'Источники расходятся. Дата исполнения требует сверки.':p.status==='planned'?'Плановая дата · '+dt(day):'Фактическая дата не подтверждена.')+'</p><div>'+(p.source?link(p.source,'График выплат')+' ':'')+evidence+'</div></article>';
+        }).join('')||'<p>В каталоге нет выплат на эту дату.</p>');
       }
       content.querySelectorAll('[data-day]').forEach(b=>b.onclick=()=>select(b.dataset.day));select(selected);
     }catch{if(request===version&&root.isConnected){content.innerHTML='Не удалось загрузить календарь. <button>Повторить</button>';content.querySelector('button').onclick=show;}}
