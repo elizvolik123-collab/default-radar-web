@@ -178,6 +178,23 @@ document.addEventListener('click',e=>{
   const defs = element('defs');
   svg.append(defs);
   document.body.append(svg);
+  // All market cards share one filter. CSS clips its output to the rim,
+  // including on cards inserted after a search, without observing scroll.
+  const rim = element('filter');
+  rim.id = 'market-glass-rim';
+  rim.setAttribute('color-interpolation-filters', 'sRGB');
+  const texture = element('feTurbulence');
+  texture.setAttribute('type', 'fractalNoise');
+  texture.setAttribute('baseFrequency', '0.017 0.035');
+  texture.setAttribute('numOctaves', '1');
+  texture.setAttribute('seed', '7');
+  texture.setAttribute('result', 'refraction');
+  const displace = element('feDisplacementMap');
+  for (const [key, value] of Object.entries({in:'SourceGraphic', in2:'refraction', scale:18, xChannelSelector:'R', yChannelSelector:'G'})) {
+    displace.setAttribute(key, value);
+  }
+  rim.append(texture, displace);
+  defs.append(rim);
   for (const [index, surface] of Array.from(surfaces).entries()) {
     surface.classList.add('glass-lens');
     const filter = element('filter'), map = element('feImage'), bend = element('feDisplacementMap');

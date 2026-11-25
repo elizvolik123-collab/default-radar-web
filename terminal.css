@@ -114,3 +114,23 @@ body { background-image:radial-gradient(ellipse at 4% 16%,#659fc72b,transparent 
 #themeToggle.glass-lens::before { z-index:0; }
 #themeToggle.glass-lens span { position:relative; }
 #market :is(.panel,.macro-card) { background-color:color-mix(in srgb,var(--analytics-face) 80%,transparent); }
+
+/* A fixed light field moves behind the scrolling, translucent card rims. */
+body:has(#market:not(.hide)) {
+  background-image:linear-gradient(118deg, transparent 19%, #83bada18 26%, transparent 34%),
+    radial-gradient(ellipse at 88% 35%, #719fcb35, transparent 49%),
+    radial-gradient(ellipse at 10% 75%, #91b6c92e, transparent 48%);
+  background-attachment:fixed;
+}
+#market :is(.panel,.macro-card) { position:relative; isolation:isolate; }
+#market :is(.panel,.macro-card)::after {
+  content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  padding:5px; background:linear-gradient(125deg,#f2fbff54,transparent 33%,transparent 69%,#a0cfee35);
+  -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  -webkit-mask-composite:xor; mask-composite:exclude;
+  backdrop-filter:blur(3px);
+}
+@supports(backdrop-filter:url(#market-glass-rim)) {
+  #market :is(.panel,.macro-card)::after { backdrop-filter:url(#market-glass-rim); }
+}
