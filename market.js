@@ -70,6 +70,13 @@ document.addEventListener('click',e=>{
 function initPaymentCalendar(root){
   const overdue=document.createElement('details');
   overdue.innerHTML='<summary>Открытые просрочки за все месяцы</summary><div aria-live="polite"></div>';
+  if(state.date>='2026-11-26'){
+    const review=document.createElement('a');
+    review.href='research/payment_review_2026-11-26.csv';
+    review.download='payment_review_2026-11-26.csv';
+    review.textContent='Сверка предыдущих выплат по 63 выпускам · 26 ноября 2026 · CSV';
+    root.before(review);
+  }
   root.before(overdue);
   overdue.ontoggle=async()=>{
     if(!overdue.open||overdue.dataset.loaded)return;
@@ -106,7 +113,11 @@ function initPaymentCalendar(root){
         for(const b of content.querySelectorAll('[data-day]'))b.setAttribute('aria-pressed',String(b.dataset.day===day));
         const labels={planned:'Запланирован',ontime:'Выплачен в срок',late:'Просрочка',unconfirmed:'Нет подтверждения'};
         content.querySelector('.cal-list').innerHTML='<h3>'+dt(day)+'</h3>'+((days.get(day)||[]).map(p=>{
-          const evidence=p.evidence.map(e=>link(e.url,'Документ · '+dt(e.published))).join(' ');
+          const evidence=p.evidence.map(e=>{
+            const host=new URL(safe(e.url),location.href).hostname.replace(/^www\./,'');
+            const publisher={'e-disclosure.ru':'Интерфакс · ЦРКИ','disclosure.ru':'АК&М','moex.com':'Московская биржа'}[host]||host;
+            return link(e.url,publisher+' · '+dt(e.published));
+          }).join(' ');
           const title=p.in_catalog===false?'<strong>'+esc(p.name)+'</strong><small>Вне аналитического каталога</small>':'<button data-bond="'+esc(p.id)+'">'+esc(p.name)+'</button>';
           return '<article class="cal-payment"><div>'+title+'<small>'+esc(p.kind)+' · '+esc(p.id)+'</small></div><strong class="pay-state '+p.status+'">'+labels[p.status]+'</strong><p>'+(p.actual?'Фактическая дата выплаты · '+dt(p.actual):p.conflict?'Источники расходятся. Дата исполнения требует сверки.':p.status==='planned'?'Плановая дата · '+dt(day):'Фактическая дата не подтверждена.')+'</p><div>'+(p.source?link(p.source,'График выплат')+' ':'')+evidence+'</div></article>';
         }).join('')||'<p>В каталоге нет выплат на эту дату.</p>');
