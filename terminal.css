@@ -325,3 +325,25 @@ html body .exchange-toolbar button[aria-pressed=true] {color:#243536;background:
   .top .wrap.nav > nav button{justify-content:center;padding:6px 4px;min-height:42px;line-height:1.15}
   #market .searchrow,#market #marketMenu{position:static;transform:none}
 }
+/* Give the marks their own contrast surface, independent of the page theme. */
+html[data-theme=light] :is(.brand img,.agent-nav-mark,.agent-status-mark,.chat-intro img.agent-intro-mark){
+  background:#162f44;border-radius:22%;box-shadow:0 0 0 1px #406076;padding:2px;box-sizing:border-box
+}
+html[data-theme=dark] :is(.brand img,.agent-nav-mark,.agent-status-mark,.chat-intro img.agent-intro-mark){
+  background:#193247;border-radius:22%;box-shadow:0 0 0 1px #7196aa;padding:2px;box-sizing:border-box
+}
+@media(max-width:760px){
+  .optical #optical-switch{display:none}
+  .top .wrap.nav #themeToggle,.optical .top #optical-switch + #themeToggle{
+    display:inline-flex!important;grid-column:2;grid-row:1;justify-self:end;align-items:center;
+    justify-content:center;gap:5px;width:auto;height:44px;min-width:90px;padding:0 10px;
+    transform:none;background:#20394a;color:#fff;border:1px solid #34566a;box-shadow:none
+  }
+  .top #themeToggle::before,.top #themeToggle span{display:none}
+  .top #themeToggle::after{content:"☾  Тёмная";font:600 14px/1 system-ui}
+  html[data-theme=dark] body .top .wrap.nav #themeToggle{background:#d7ebef;color:#152f40;border-color:#9bc5cd}
+  html[data-theme=dark] .top #themeToggle::after{content:"☀  Светлая"}
+  .chat-viewport main.wrap{overflow:hidden}
+  .chat-viewport .page-head,.chat-viewport #chatContext:empty{display:none}
+  #market #query,.chat-viewport #question{font-size:16px}
+}
