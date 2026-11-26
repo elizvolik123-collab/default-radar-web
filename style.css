@@ -18,3 +18,13 @@
 .radar-panel{border-left:5px solid var(--signal,#677780)}.radar-panel.level-red{--signal:#a83337}.radar-panel.level-yellow{--signal:#97630e}.radar-panel.level-green{--signal:#197049}
 .radar-panel h2{display:flex;align-items:center;gap:.5em}.signal-dot{width:.62em;height:.62em;border-radius:50%;background:var(--signal,#677780);display:inline-block;flex:none}
 .radar-panel li,#creditDocuments details{margin:.6rem 0}.radar-panel details summary,#creditDocuments summary,#yieldCurve summary{cursor:pointer}
+
+.page-head h1:has(+ #openGuide){display:inline}
+#openGuide{vertical-align:middle;margin-inline-start:.65rem}
+#radarGuide{background:var(--surface,var(--bg));color:var(--ink);width:min(31rem,92vw)}
+#radarGuide h2{margin:0}
+.guide-steps{padding-inline-start:1.5rem;line-height:1.55}
+.guide-steps li{margin-block:.85rem}
+.payment-brief{margin-block:1rem;padding:1rem;border:1px solid var(--line);border-radius:14px}
+.payment-brief h3,.payment-brief p{margin:0 0 .65rem}
+.payment-brief p:last-child{margin-bottom:0}

@@ -48,6 +48,30 @@ async function load(push=false){
   try{const result=await api('/api/bond?'+params());if(token!==seq)return;data=result;data.request=token;render();refreshTape();startBondFeed(result);notice('');if(!$('catalog').classList.contains('hide'))searchList();}
   catch(e){if(token!==seq)return;data=null;$('detail').innerHTML='<p class="empty">Выберите другой выпуск или дату анализа.</p>';$('chatContext').textContent='Нет выпуска на эту дату';$('dialogue').innerHTML='';notice(e.message);}
 }
+function attentionList(items){
+  const labels={overdue:'Опубликовано сообщение об открытой просрочке',raised:'Появилось предупреждение модели',paid:'Опубликовано подтверждение выплаты',entered:'Выпуск вошёл в семидневное окно'};
+  function row(item){
+    return '<div class="docrow"><div><button data-bond="'+esc(item.id)+'">'+esc(item.name)+'</button><small>'+labels[item.group]+' · '+esc(item.kind)+' · срок '+dt(item.due)+'</small></div>'+link(item.url,item.group==='entered'?'График':item.group==='raised'?'Торги':'Документ')+'</div>';
+  }
+  return '<section class="panel"><h2>Что требует внимания</h2><p class="sub">Изменения за '+dt(state.date)+'</p>'+
+    (items.length?items.slice(0,4).map(row).join('')+(items.length>4?'<details><summary>Ещё событий: '+fmt(items.length-4)+'</summary>'+items.slice(4).map(row).join('')+'</details>':''):'<p>В доступном срезе новых событий за эту дату нет.</p>')+'</section>';
+}
+function paymentBrief(item){
+  const f=item.forecast, next=item.next, expert=item.expert, q=item.quality;
+  const signal=f?.state==='signal';
+  const driver=f?.driver;
+  const impact=driver?.effect ? ' Наибольший вклад среди ценовых факторов '+(driver.effect>0?'повышает':'снижает')+' оценку риска: '+(driver.feature==='price'?'уровень цены относительно номинала.':'динамика цены за период.') : '';
+  const states={confirmed:'Исполнение предыдущего платежа подтверждено.',unknown:'Для предыдущего обязательства нет однозначного подтверждения исполнения.',first:'Предстоит первый купон выпуска.',overdue:'По предыдущей выплате документирована открытая просрочка.',conflict:'Документы расходятся в дате или статусе предыдущей выплаты.'};
+  const factor=Object.entries(expert?.blocks||{}).filter(([,v])=>v?.reason&&v.url).sort(([a,x],[b,y])=>(item.weights[b]||0)*y.points-(item.weights[a]||0)*x.points)[0]?.[1];
+  const disagree=signal && expert?.eligible && expert.score!=null &&
+    ((f.alert&&expert.level==='Низкий')||(!f.alert&&['Высокий','Повышенный'].includes(expert.level)));
+  const docs=q?.previous==='first'?link('https://iss.moex.com/iss/statistics/engines/stock/markets/bonds/bondization/'+encodeURIComponent(item.bond.secid)+'.json','График Мосбиржи'):(q?.documents||[]).map((url,i)=>link(url,'Документ '+(i+1))).join(' · ');
+  return '<section class="payment-brief"><h3>'+(next?esc(next.kind)+' · '+dt(next.date):'Дата следующего платежа неизвестна')+'</h3>'+
+    '<p><b>Прогноз платежа.</b> '+(signal?(f.alert?'Модель предупреждает о риске просрочки.':'Порог предупреждения не достигнут.')+' Цена закрытия '+fmt(f.close)+'% номинала, изменение с '+dt(f.start)+' — '+fmt(f.change)+' п. п. '+link(f.url,'Торги')+impact:esc(f?.reason||'Прогноз недоступен.'))+'</p>'+
+    '<p><b>Состояние эмитента и выпуска.</b> '+(expert?.eligible&&expert.score!=null?esc(expert.level)+' риск по экспертному индексу · '+fmt(expert.score)+' из 100. '+(factor?esc(factor.reason)+' '+link(factor.url,'Основание'):''):'Экспертная оценка недоступна.')+'</p>'+
+    (disagree?'<p>Оценки расходятся. Прогноз ближайшей выплаты использует цену и её изменение. Экспертный индекс учитывает также раскрытия и факторы состояния эмитента.</p>':'')+
+    '<p><b>Полнота данных.</b> '+(q?states[q.previous]+' '+docs+' '+(q.federal?'Корпоративная отчётность к ОФЗ неприменима.':q.fresh?'Есть свежие сопоставимые показатели отчётности.':'Не хватает свежих сопоставимых показателей отчётности.')+(q.terms?'':' Параметры ближайшего купона неполны.'):'Для этого выпуска полнота данных на выбранную дату не оценена.')+'</p></section>';
+}
 function marketHome(m){
   const research=m.research;
   refreshTape([...m.series,...m.bonds]);
@@ -55,12 +79,12 @@ function marketHome(m){
       ['Платежей с подтверждением',research.universe.n],['Своевременных',research.universe.ontime],['С просрочкой',research.universe.late],['Купонов в позднем тесте за 7 дней',research.test.n]].map(([k,v])=>'<div><small>'+k+'</small><strong>'+fmt(v)+'</strong></div>').join('')+'</div><details><summary>Результаты на более поздних купонах</summary><p>Обучение по документам до '+dt(research.cutoff)+'. Проверка по срокам с '+dt(research.test.first)+' по '+dt(research.test.last)+'. Сигнал сработал перед '+fmt(research.test.tp)+' из '+fmt(research.test.late)+' просрочек. Ложных тревог — '+fmt(research.test.fp)+' из '+fmt(research.test.ontime)+' своевременных платежей.</p><p>ROC AUC '+fmt(research.test.roc_auc,3)+' · у постоянного прогноза 0,5. Своевременные платежи в обучении подтверждены у '+fmt(research.train_performing_issuers)+' эмитентов. Частота просрочек в этой выборке отличается от рынка.</p><p>Правило «цена ≤ 90% номинала» предупредило '+fmt(research.price_rule.tp)+' просрочек при '+fmt(research.price_rule.fp)+' ложных тревогах.</p>'+research.examples.map(e=>'<div class="docrow"><div><strong>'+esc(e.name)+'</strong><small>'+dt(e.due)+' · '+esc(e.outcome)+'</small></div>'+link(e.url,'Исход')+' '+link(e.price_url,'Торги')+'</div>').join('')+'<p><a href="research/payments.csv" download="payment_outcomes.csv">Скачать историю выплат и результаты (CSV)</a></p></details></details>':'');
   const coverage=m.analysis_coverage, first=research?.first_defaults;
   const gaps=coverage.missing;
-  const breakdown='<h3>Что ограничивает полный разбор</h3><p>До платежа больше семи дней у <strong>'+fmt(coverage.outside_window)+'</strong> выпусков. Ещё у <strong>'+fmt(coverage.inside_unscored)+'</strong> срок в пределах окна, но модель не рассчитала прогноз.</p><details open><summary>Пробелы по всем '+fmt(coverage.total)+' выпускам</summary><div class="tablewrap"><table><thead><tr><th>Не хватает</th><th>Весь каталог</th><th>С прогнозом</th></tr></thead><tbody>'+[
+  const breakdown='<h3>Что ограничивает полный разбор</h3><p>До платежа больше семи дней у <strong>'+fmt(coverage.outside_window)+'</strong> выпусков. Ещё у <strong>'+fmt(coverage.inside_unscored)+'</strong> срок в пределах окна, но модель не рассчитала прогноз.</p><details><summary>Пробелы по всем '+fmt(coverage.total)+' выпускам</summary><div class="tablewrap"><table><thead><tr><th>Не хватает</th><th>Весь каталог</th><th>С прогнозом</th></tr></thead><tbody>'+[
     ['Цена сделки за окно отбора','price'],['НКД','accrued'],['Сумма купона','coupon'],['Актуальная дата ближайшего купона','coupon_date'],['Подтверждённое исполнение предыдущего платежа','previous'],['В том числе не установлен срок предыдущей выплаты','no_previous_date'],['Два сопоставимых отчётных периода','reports'],['Периоды сопоставимы, но последний устарел','stale_reports']
   ].map(([label,key])=>'<tr><th scope="row">'+label+'</th><td>'+fmt(gaps[key])+'</td><td>'+fmt(coverage.missing_scored[key])+'</td></tr>').join('')+'</tbody></table></div>' +'<p>Числа показывают, скольким выпускам не хватает каждого поля. Один выпуск может попасть в несколько строк. ОФЗ без требования корпоративной отчётности: '+fmt(coverage.sovereign)+'.</p></details>';
   const auditLink=coverage.asof.slice(0,10)==='2026-11-26' ? '<p><a href="research/coverage_781_2026-11-26.csv" download>Скачать проверку 781 выпуска по ISIN · CSV</a></p>' : '';
-  const summary='<section class="panel"><h2>Покрытие анализа на '+dt(coverage.asof)+'</h2><p><strong>'+fmt(coverage.full)+' из '+fmt(coverage.total)+'</strong> выпусков доступны для полного разбора. Прогноз ближайшего платежа рассчитан для '+fmt(coverage.scored)+'.</p>'+breakdown+auditLink+'<details><summary>Как считаем полный разбор</summary><p>Считаем уникальные выпуски с рыночной ценой, прогнозом на ближайшие семь дней, НКД и суммой ближайшего купона, подтверждённой датой исполнения предыдущего известного платежа и двумя сопоставимыми отчётными периодами. Последний период закончился не более 370 дней назад.</p>'+coverage.ids.map(id=>'<button data-bond="'+esc(id)+'">'+esc(id)+'</button>').join('')+'</details>'+
-    (first?'<h3>Предупреждение о первой просрочке</h3><p>За семь дней до срока модель выявила <strong>'+fmt(first.tp)+' из '+fmt(first.late)+'</strong> просроченных купонов и пропустила <strong>'+fmt(first.fn)+'</strong>. Проверка за '+dt(research.test.first)+' — '+dt(research.test.last)+'. Учитываются купоны на первую известную дату просрочки каждого эмитента.</p>':'')+'</section>';
+  const summary='<section class="panel"><h2>Покрытие анализа на '+dt(coverage.asof)+'</h2><p><strong>'+fmt(coverage.full)+' из '+fmt(coverage.scored)+'</strong> выпусков с прогнозом доступны для полного разбора. До '+dt(dtadd(state.date,7))+' включительно предстоят платежи по '+fmt(coverage.total-coverage.outside_window)+' выпускам. Модель рассчитала прогноз для '+fmt(coverage.scored)+' из них. Всего в каталоге '+fmt(coverage.total)+'.</p></section>'+attentionList(m.attention||[])+'<section class="panel">'+breakdown+auditLink+'<details><summary>Как считаем полный разбор</summary><p>Считаем уникальные выпуски с рыночной ценой, прогнозом на ближайшие семь дней, НКД и суммой ближайшего купона, подтверждённой датой исполнения предыдущего известного платежа и двумя сопоставимыми отчётными периодами. Последний период закончился не более 370 дней назад.</p>'+coverage.ids.map(id=>'<button data-bond="'+esc(id)+'">'+esc(id)+'</button>').join('')+'</details>'+
+    (first?'<h3>Предупреждение о первой просрочке</h3><p>За семь дней до срока модель выявила <strong>'+fmt(first.tp)+' из '+fmt(first.late)+'</strong> просроченных купонов и пропустила <strong>'+fmt(first.fn)+'</strong>. Из '+fmt(first.tp+first.fp)+' предупреждений подтвердились '+fmt(first.tp)+(first.tp+first.fp?' ('+fmt(100*first.tp/(first.tp+first.fp),1)+'%)':'')+', ложных — '+fmt(first.fp)+'. В выборке '+fmt(first.n)+' платежей. Проверка за '+dt(research.test.first)+' — '+dt(research.test.last)+'. Учитываются купоны на первую известную дату просрочки каждого эмитента.</p>':'')+'</section>';
   $('marketHome').innerHTML=summary+marketDashboard(m)+'<section id="paymentCalendar" class="panel"><h2>Календарь облигационных выплат</h2><div class="calendar-body"></div></section>'+
     (research?'<details id="marketWatch" class="panel"><summary>Сигналы риска по выплатам на семь дней</summary><div aria-live="polite"></div></details>':'')+newsFeed(m)+methodology;
   initPaymentCalendar($('paymentCalendar').querySelector('.calendar-body'));
@@ -106,7 +130,7 @@ function timeline(){
 function statusLabel(){const recent=data.registry?.[0],outcome=data.outcomes?.[0];if(outcome&&(!data.payment||outcome.due>data.payment.date)&&(!recent||outcome.due>recent.due))return [(outcome.late?'Просрочка':'Выплата в срок')+' · '+dt(outcome.due,false),outcome.late?'red':'green'];if(recent && (!data.payment||recent.due>data.payment.date))return [recent.status+' · '+dt(recent.due,false),'red'];if(data.payment)return [data.payment.status,data.payment.status.includes('опозданием')?'amber':'green'];const ev=data.events.find(x=>x.kind==='Просрочка');return ev?['Нарушение срока','amber']:data.events.some(x=>x.kind==='Рейтинг')?['Есть рейтинговый сигнал','amber']:['Исполнение не подтверждено',''];}
 function overview(){
   const b=data.bond,[label,color]=statusLabel(), next=data.next;
-  return '<div id="bondOverview" class="panel bond-summary"><div class="card-title"><div class="identity"><div class="emblem">'+icon('bond')+'</div><div><h2>'+esc(b.name)+'</h2><div class="mono">'+esc(b.isin||b.secid)+'</div></div></div><span class="badge '+color+'">'+esc(label)+'</span></div>'+bondHighlights(data)+riskExplanation(data)+'<div class="metrics">'+[
+  return '<div id="bondOverview" class="panel bond-summary"><div class="card-title"><div class="identity"><div class="emblem">'+icon('bond')+'</div><div><h2>'+esc(b.name)+'</h2><div class="mono">'+esc(b.isin||b.secid)+'</div></div></div><span class="badge '+color+'">'+esc(label)+'</span></div>'+paymentBrief(data)+bondHighlights(data)+riskExplanation(data)+'<div class="metrics">'+[
     ['Эмитент',b.issuer_name,b.inn?'ИНН '+b.inn:'ИНН не указан'],
     ['Номинал',b.nominal!=null?fmt(b.nominal)+' '+(cashCurrency(b.currency)):'—',b.nominal==null?'Нет данных на срез':'На одну облигацию'],
     ['Погашение',dt(b.maturity),b.maturity?'По параметрам выпуска':'Нет данных на срез'],
@@ -265,7 +289,7 @@ document.addEventListener('click',async event=>{
  if(a.action==='search'){$('query').focus();openSearch();return;}
  if(a.action==='refresh'&&state.mode==='demo'){notice('Архивный режим использует сохранённые данные. Для обновления выберите Live.');return;}if(a.action==='refresh'){el.disabled=true;el.textContent='Запрос к бирже…';try{const r=await api('/api/refresh',state);await load();notice(r.message);}catch(e){notice(e.message);}finally{el.disabled=false;}return;}
 });
-document.addEventListener('keydown',e=>{if(e.key==='/'&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)&&!$('modal').open){e.preventDefault();state.tab='market';tabs();save();$('query').focus();openSearch();}if((e.key==='Enter'||e.key===' ')&&e.target.matches('svg [role="button"]')){e.preventDefault();e.target.dispatchEvent(new MouseEvent('click',{bubbles:true}));}});
+document.addEventListener('keydown',e=>{if(e.key==='/'&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)&&!$('modal').open&&!$('radarGuide').open){e.preventDefault();state.tab='market';tabs();save();$('query').focus();openSearch();}if((e.key==='Enter'||e.key===' ')&&e.target.matches('svg [role="button"]')){e.preventDefault();e.target.dispatchEvent(new MouseEvent('click',{bubbles:true}));}});
 const marketMenu=$('marketMenu');
 function closeMarketMenu(focus=false){
   marketMenu.open=false;
@@ -331,3 +355,11 @@ $('askForm').onsubmit=e=>{e.preventDefault();ask($('question').value.trim());};$
 window.onpopstate=()=>{state=readState();load().then(()=>{if(state.tab==='market')scrollToPart(state.section);});};
 tabs();load();if(window.pagesRadar)notice('Загружаем каталог и модель прогноза…');api('/api/coverage').then(r=>{stats=r;renderChat();}).catch(e=>notice(e.message));
 
+
+const guide=$('radarGuide');
+$('openGuide').onclick=()=>guide.showModal();
+guide.addEventListener('close',()=>{
+  try{localStorage.setItem('radar.guideSeen','1');}catch{}
+  $('openGuide').focus({preventScroll:true});
+});
+try{if(!localStorage.getItem('radar.guideSeen'))guide.showModal();}catch{}
