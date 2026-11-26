@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112 100">
+  <defs>
+    <radialGradient id="face" cx=".52" cy=".88" r=".9"><stop stop-color="#114453"/><stop offset=".65" stop-color="#0c2636"/><stop offset="1" stop-color="#102236"/></radialGradient>
+    <linearGradient id="sweep" x1="0" y1="0" x2="1" y2=".8"><stop stop-color="#1c95ac" stop-opacity="0"/><stop offset=".57" stop-color="#318ba5" stop-opacity=".46"/><stop offset="1" stop-color="#b8faff"/></linearGradient>
+    <linearGradient id="metal" x2="1" y2="1"><stop stop-color="#4ce1e3"/><stop offset="1" stop-color="#284772"/></linearGradient>
+    <clipPath id="dial"><path d="M4 61a50 50 0 0 1 100 0Z"/></clipPath>
+  </defs>
+  <style>.sweep{transform-origin:54px 61px;animation:scan 4.2s ease-in-out infinite alternate}@keyframes scan{from{transform:rotate(-69deg)}to{transform:rotate(69deg)}}@media(prefers-reduced-motion:reduce){.sweep{animation:none;transform:rotate(49deg)}}</style>
+  <g stroke-linecap="round">
+    <path d="M4 61a50 50 0 0 1 100 0Z" fill="url(#face)" stroke="#77c9db" stroke-width="1.7"/>
+    <g fill="none" stroke="#437f93" stroke-width=".75"><circle cx="54" cy="61" r="24"/><circle cx="54" cy="61" r="35" stroke-dasharray="2 4"/><path d="M54 9v81M3 61h99"/></g>
+    <g clip-path="url(#dial)"><g class="sweep"><path d="M54 61 31 15a51 51 0 0 1 23-6Z" fill="url(#sweep)"/><path d="M54 61V11" stroke="#72e5fb" stroke-width="3.6" opacity=".42"/><path d="M54 61V11" stroke="#e4fcff" stroke-width="1.7"/></g></g>
+    <circle cx="54" cy="61" r="2.7" fill="#c2f8ff" stroke="#52adb9"/>
+    <path d="M65 86h6v5h-6z M75 79h6v12h-6z M85 71h6v20h-6z M95 62h6v29h-6z" fill="url(#metal)" stroke="#69aabb" stroke-width=".7"/>
+  </g>
+</svg>

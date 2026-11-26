@@ -1,1 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44"><rect width="44" height="44" rx="12" fill="#123b43"/><g fill="none" stroke="#93e7cd" stroke-width="2.3" stroke-linecap="round"><path d="M34 21a13 13 0 1 1-12-12m5 1.5L22 22l10-7"/><path d="M28.1 23.7a6.4 6.4 0 1 1-7.7-8"/></g><circle cx="22" cy="22" r="2.5" fill="#b3f5df"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112 104">
+  <defs>
+    <linearGradient id="rim" x2=".9" y2="1" gradientUnits="objectBoundingBox"><stop stop-color="#daffff"/><stop offset=".35" stop-color="#80b8f1"/><stop offset=".73" stop-color="#7186e2"/><stop offset="1" stop-color="#e8ccff"/></linearGradient>
+    <linearGradient id="back" x2="1" y2="1"><stop stop-color="#b6e6ff"/><stop offset=".16" stop-color="#315e8a"/><stop offset=".6" stop-color="#112a53"/><stop offset=".92" stop-color="#5969a6"/><stop offset="1" stop-color="#cca5ff"/></linearGradient>
+    <linearGradient id="front" x2="1" y2="1"><stop stop-color="#83c2ee" stop-opacity=".9"/><stop offset=".19" stop-color="#113c69" stop-opacity=".81"/><stop offset=".60" stop-color="#19446e" stop-opacity=".72"/><stop offset=".85" stop-color="#4a578a" stop-opacity=".84"/><stop offset="1" stop-color="#ba96ef"/></linearGradient>
+    <linearGradient id="bars" x2="1" y2="0"><stop stop-color="#55cbff"/><stop offset=".5" stop-color="#99caff"/><stop offset="1" stop-color="#9baff1"/></linearGradient>
+  </defs>
+  <g stroke="url(#rim)" stroke-width="1.35" stroke-linejoin="round">
+    <path fill="url(#back)" d="M21 29 84 5q5-2 6 5l1 62q0 5-5 6l-61-2q-5 0-5-6l-2-35q0-4 3-6Z"/>
+    <path fill="url(#back)" d="m40 29 58-15q7-2 7 5v61q0 6-6 6l-55-7q-5-1-5-6l-3-38q0-4 4-6Z"/>
+    <path fill="url(#front)" d="m7 40 68-17q5-1 6 5l7 52-4 12q-1 5-7 4L12 85q-5-1-5-6L3 47q-1-5 4-7Z"/>
+    <path fill="url(#bars)" stroke-width=".65" d="M35 72h6v5h-6z M45 67h6v10h-6z M55 61h6v16h-6z M65 53h6v24h-6z M75 44h6v33h-6z"/>
+  </g>
+</svg>

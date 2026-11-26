@@ -277,3 +277,6 @@ html body .exchange-toolbar button[aria-pressed=true] {color:#243536;background:
 .pay-state {align-self:start;border-radius:.5rem;background:var(--surface-alt);color:var(--ink);padding:.35rem .55rem;font-size:.85rem}
 .pay-state.ontime {background:#c4e5d4;color:#174833}.pay-state.late {background:#f7cbca;color:#652420}
 @media(max-width:520px){.cal-payment{grid-template-columns:1fr}.pay-state{justify-self:start}}
+.agent-nav-mark{width:1.4em;height:1.4em;object-fit:contain;flex:none}
+.agent-status-mark{width:2em;height:2em;object-fit:contain}
+.chat-intro img.agent-intro-mark{width:80px;height:74px;object-fit:contain;background:transparent;border:0;border-radius:0;padding:0;box-shadow:none}
