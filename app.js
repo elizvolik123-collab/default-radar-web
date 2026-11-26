@@ -238,6 +238,7 @@ document.addEventListener('input',e=>{
 });
 async function ask(q,choiceId='',selection={}){
   if(loadingChat||!q.trim()||(state.id&&!data))return;
+  if(matchMedia('(max-width:760px)').matches && document.activeElement===$('question')) $('question').blur();
   const key=chatKey(),list=chats.get(key)||[];chats.set(key,list);list.push({user:q});loadingChat=true;
   $('askForm').querySelector('button').disabled=true;$('question').value='';renderChat();$('mode').textContent='Проверяем сведения на выбранную дату…';
   const view={...state};agentStage('Получение данных',true);
@@ -249,7 +250,10 @@ async function ask(q,choiceId='',selection={}){
     }
   }
   catch(e){agentStage('Ошибка запроса');list.push({text:e.message,mode:'Ошибка запроса',refs:[],section:'detail',id:state.id});}
-  finally{loadingChat=false;$('askForm').querySelector('button').disabled=false;renderChat();if(state.tab==='chat')dialogue.scrollTop=dialogue.scrollHeight;}
+  finally{loadingChat=false;$('askForm').querySelector('button').disabled=false;renderChat();if(state.tab==='chat' && chats.get(chatKey())?.at(-1)===list.at(-1)){
+    const log=$('dialogue'), answer=log.lastElementChild;
+    if(answer) log.scrollTop+=answer.getBoundingClientRect().top-log.getBoundingClientRect().top;
+  }}
 }
 function askFrom(section){
   if(section==='bondRadar'&&(loadingChat||!data||data.bond.id!==state.id))return;
@@ -363,3 +367,11 @@ guide.addEventListener('close',()=>{
   $('openGuide').focus({preventScroll:true});
 });
 try{if(!localStorage.getItem('radar.guideSeen'))guide.showModal();}catch{}
+
+if(window.visualViewport){
+  const syncChatHeight=()=>{
+    if(window.visualViewport.scale===1)document.documentElement.style.setProperty('--chat-visible-height',window.visualViewport.height+'px');
+  };
+  syncChatHeight();
+  window.visualViewport.addEventListener('resize',syncChatHeight);
+}
