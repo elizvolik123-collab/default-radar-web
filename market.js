@@ -68,6 +68,17 @@ document.addEventListener('click',e=>{
   $('macroPanel').outerHTML=marketDashboard(macroSnapshot);
 });
 function initPaymentCalendar(root){
+  const overdue=document.createElement('details');
+  overdue.innerHTML='<summary>Открытые просрочки за все месяцы</summary><div aria-live="polite"></div>';
+  root.before(overdue);
+  overdue.ontoggle=async()=>{
+    if(!overdue.open||overdue.dataset.loaded)return;
+    const box=overdue.querySelector('div');overdue.dataset.loaded='1';box.textContent='Загрузка…';
+    try{
+      const {rows}=await api('/api/open-overdue?'+params());
+      box.innerHTML='<p>Документированные нарушения без подтверждения полного исполнения на '+dt(state.date)+'. Обновление торгов для наблюдения не требуется. Обязательств: '+fmt(rows.length)+'.</p>'+rows.map(r=>'<p><strong>'+esc(r.name)+'</strong> · '+esc(r.id)+' · '+esc(r.kind)+' · срок '+dt(r.due)+'<br>'+link(r.url,'Документ от '+dt(r.published))+'</p>').join('');
+    }catch{delete overdue.dataset.loaded;box.textContent='Не удалось загрузить сведения. Закройте и откройте список повторно.';}
+  };
   let month=state.date.slice(0,7), selected=state.date, version=0;
   const iso=date=>date.toISOString().slice(0,10);
   async function show(){
@@ -96,7 +107,8 @@ function initPaymentCalendar(root){
         const labels={planned:'Запланирован',ontime:'Выплачен в срок',late:'Просрочка',unconfirmed:'Нет подтверждения'};
         content.querySelector('.cal-list').innerHTML='<h3>'+dt(day)+'</h3>'+((days.get(day)||[]).map(p=>{
           const evidence=p.evidence.map(e=>link(e.url,'Документ · '+dt(e.published))).join(' ');
-          return '<article class="cal-payment"><div><button data-bond="'+esc(p.id)+'">'+esc(p.name)+'</button><small>'+esc(p.kind)+' · '+esc(p.id)+'</small></div><strong class="pay-state '+p.status+'">'+labels[p.status]+'</strong><p>'+(p.actual?'Фактическая дата выплаты · '+dt(p.actual):p.conflict?'Источники расходятся. Дата исполнения требует сверки.':p.status==='planned'?'Плановая дата · '+dt(day):'Фактическая дата не подтверждена.')+'</p><div>'+(p.source?link(p.source,'График выплат')+' ':'')+evidence+'</div></article>';
+          const title=p.in_catalog===false?'<strong>'+esc(p.name)+'</strong><small>Вне аналитического каталога</small>':'<button data-bond="'+esc(p.id)+'">'+esc(p.name)+'</button>';
+          return '<article class="cal-payment"><div>'+title+'<small>'+esc(p.kind)+' · '+esc(p.id)+'</small></div><strong class="pay-state '+p.status+'">'+labels[p.status]+'</strong><p>'+(p.actual?'Фактическая дата выплаты · '+dt(p.actual):p.conflict?'Источники расходятся. Дата исполнения требует сверки.':p.status==='planned'?'Плановая дата · '+dt(day):'Фактическая дата не подтверждена.')+'</p><div>'+(p.source?link(p.source,'График выплат')+' ':'')+evidence+'</div></article>';
         }).join('')||'<p>В каталоге нет выплат на эту дату.</p>');
       }
       content.querySelectorAll('[data-day]').forEach(b=>b.onclick=()=>select(b.dataset.day));select(selected);
