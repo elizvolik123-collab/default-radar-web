@@ -20,7 +20,7 @@ const chats=new Map();
 const chatKey=()=>[state.mode,state.id,state.date,state.time].join('|');
 const params=()=>new URLSearchParams(Object.entries(state).filter(([,v])=>v!=='' && v!=null));
 function save(push=false){const query=params();if(state.mode==='live' && state.date===moscowDay() && !state.time)query.delete('date');const url='?'+query;if(location.search!==url)history[push?'pushState':'replaceState']({},'',url);}
-async function api(url,body){if(window.pagesRadar){const result=await window.pagesRadar.request(url,body);if(result?.code==='coverage')throw Object.assign(Error(result.error),{code:result.code});return result;}const r=await fetch(url,body?{method:'POST',headers:{'Content-Type':'application/json','X-Radar':'1'},body:JSON.stringify(body)}:{});const d=await r.json();if(!r.ok)throw Object.assign(Error(d.error||'Сервер недоступен'),{code:d.code});return d;}
+async function api(url,body){if(window.pagesRadar){const result=await window.pagesRadar.request(url,body);if(result?.code==='coverage')throw Object.assign(Error(result.error),{code:result.code,identity:result.identity});return result;}const r=await fetch(url,body?{method:'POST',headers:{'Content-Type':'application/json','X-Radar':'1'},body:JSON.stringify(body)}:{});const d=await r.json();if(!r.ok)throw Object.assign(Error(d.error||'Сервер недоступен'),{code:d.code,identity:d.identity});return d;}
 function notice(msg){$('notice').innerHTML=msg?'<div class="strip">'+esc(msg)+(msg.startsWith('Браузер не смог')||msg.startsWith('Не удалось прочитать')?' <button data-action="retry">Повторить загрузку</button>':'')+'</div>':'';}
 function scrollToPart(id){requestAnimationFrame(()=>$(id)?.scrollIntoView({block:'start'}));}
 function modal(title,html){$('modalTitle').textContent=title;$('modalBody').innerHTML=html;if(!$('modal').open)$('modal').showModal();}
@@ -39,7 +39,9 @@ function tabs(){
   $('asof').value=state.date;
   if(chat)stopBondFeed();else if(data?.request===seq)startBondFeed(data);
 }
+let unavailableCard='';
 async function load(push=false){
+  unavailableCard='';
   const token=++seq;stopBondFeed();stopTapeFeed();save(push);tabs();notice(''); if($('screen').open)refreshScreen();
   $('marketHome').innerHTML='';
   if(!state.id){
@@ -48,7 +50,26 @@ async function load(push=false){
     return;
   }
   try{const result=await api('/api/bond?'+params());if(token!==seq)return;data=result;data.request=token;render();refreshTape();startBondFeed(result);notice('');if(!$('catalog').classList.contains('hide'))searchList();}
-  catch(e){if(token!==seq)return;data=null;$('detail').innerHTML='<p class="empty">Выберите другой выпуск или дату анализа.</p>';$('chatContext').textContent='Нет выпуска на эту дату';$('dialogue').innerHTML='';notice(e.code==='coverage'?'На '+dt(state.date)+' данных недостаточно для полного разбора этого выпуска. Выберите другую дату.':e.message);if(e.code!=='coverage'&&!$('notice').querySelector('button'))$('notice').insertAdjacentHTML('beforeend','<button data-action="retry">Повторить загрузку</button>');}
+  catch(e){
+    if(token!==seq)return;
+    data=null;
+    if(e.code==='coverage'){
+      const issue=e.identity||{};
+      const issuer=issue.inn==='7708503727'?'РЖД':issue.issuer_name||issue.name||state.id;
+      const date=new Intl.DateTimeFormat('ru-RU',{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(state.date+'T12:00:00Z')).replace(/ г\.$/,' года');
+      const message='На '+date+' недостаточно данных для полного разбора '+issuer+'.';
+      unavailableCard='<article class="panel"><h2>'+esc(issue.name||state.id)+'</h2><span class="mono">'+esc(issue.isin||state.id)+'</span><p>'+esc(message)+'</p></article>';
+      $('detail').innerHTML=unavailableCard;
+      $('chatContext').innerHTML=unavailableCard;
+      notice(message+' Выберите другую дату.');
+    }else{
+      $('detail').innerHTML='<p class="empty">Не удалось загрузить карточку выпуска.</p>';
+      $('chatContext').textContent='Не удалось загрузить данные выпуска';
+      notice(e.message);
+      if(!$('notice').querySelector('button'))$('notice').insertAdjacentHTML('beforeend','<button data-action="retry">Повторить загрузку</button>');
+    }
+    $('dialogue').innerHTML='';
+  }
 }
 function attentionList(items){
   const labels={overdue:'Опубликовано сообщение об открытой просрочке',raised:'Появилось предупреждение модели',paid:'Опубликовано подтверждение выплаты',entered:'Выпуск вошёл в семидневное окно'};
@@ -216,7 +237,7 @@ function render(){
 function docModal(id){const d=data.documents.find(x=>x.id===id);if(!d)return;state.event=id;save();modal(d.title,'<p class="meta">'+esc(d.publisher)+' · '+esc(d.kind)+'</p><p class="modalbody">'+esc(d.body)+'</p><div class="doclist"><div class="lineitem"><span>Дата события</span>'+dt(d.occurred)+'</div><div class="lineitem"><span>Опубликовано</span>'+dt(d.published)+(d.published.includes('T')?' '+esc(d.published.slice(11,16))+' МСК':' · время не указано')+'</div><div class="lineitem"><span>Сохранено</span>'+dt(d.loaded)+'</div></div><div class="drawer-actions">'+link(d.url,'Открыть первоисточник','lightbtn')+(id==='ncr'?'<a class="lightbtn" href="documents/nkr-20260407.pdf" target="_blank" rel="noopener">Сохранённый PDF ↗</a>':'')+'<button class="primary" data-ask="doc">Объяснить в чате</button></div>');}
 function detailsModal(){const b=data.bond;modal('Реквизиты выпуска','<div class="modalbody"><b>'+esc(b.name)+'</b><p>'+esc(b.issuer_name)+'</p><p>ИНН '+esc(b.inn||'не указан')+'</p><p>ISIN '+esc(b.isin||'не указан')+' · SECID '+esc(b.secid)+'</p><p>Последняя сохранённая сделка на срез — '+dt(data.last?.day)+'</p><p>Режимы с историей на срез — '+esc(data.boards.join(', ')||'нет сведений')+'</p><p class="meta">Связи с группой и поручители в справочнике не подтверждены.</p>'+link(b.source,'Справочник MOEX')+'</div>');}
 function renderChat(){
-  $('chatContext').innerHTML=data?'<div class="panel chat-context"><div><div class="cap">В контексте</div><strong>'+esc(data.bond.name)+'</strong><div class="mono">'+esc(state.id)+' · '+dt(state.date)+(state.time?' '+esc(state.time):'')+(state.week?' · неделя с '+dt(state.week,false):'')+(state.point?' · сделка '+dt(state.point,false):'')+'</div></div><button class="textbtn" data-return="'+esc(state.section)+'">К аналитике →</button></div>':'';
+  $('chatContext').innerHTML=data?'<div class="panel chat-context"><div><div class="cap">В контексте</div><strong>'+esc(data.bond.name)+'</strong><div class="mono">'+esc(state.id)+' · '+dt(state.date)+(state.time?' '+esc(state.time):'')+(state.week?' · неделя с '+dt(state.week,false):'')+(state.point?' · сделка '+dt(state.point,false):'')+'</div></div><button class="textbtn" data-return="'+esc(state.section)+'">К аналитике →</button></div>':unavailableCard;
   const engine=$('chatEngine');
   engine.value=state.mode==='demo'?'archive':localStorage.getItem('radar.chatEngine')||'auto';
   engine.disabled=loadingChat||state.mode==='demo';
