@@ -51,6 +51,7 @@ class ExchangeChart extends HTMLElement {
     queueMicrotask(()=>{if (this.isConnected && !this.chart) this.mount();});
   }
   disconnectedCallback() {
+    this.sizeObserver?.disconnect();
     this.chart?.remove();
     this.chart = null;
   }
@@ -93,7 +94,7 @@ class ExchangeChart extends HTMLElement {
     const chart=this.chart=LightweightCharts.createChart(canvas,{
       autoSize:true,layout:{background:{type:'solid',color:'#101113'},textColor:'#bcc0c7',fontSize:12,attributionLogo:true},
       grid:{vertLines:{color:'#25272a'},horzLines:{color:'#25272a'}},
-      rightPriceScale:{borderColor:'#34373c'},timeScale:{borderColor:'#34373c',rightOffset:2,minBarSpacing:0.15,shiftVisibleRangeOnNewBar:false},
+      rightPriceScale:{borderColor:'#34373c'},timeScale:{borderColor:'#34373c',rightOffset:0,fixLeftEdge:true,fixRightEdge:true,minBarSpacing:0.15,shiftVisibleRangeOnNewBar:false},
       localization:{locale:'ru-RU',dateFormat:'dd.MM.yyyy',timeFormatter:t=>typeof t==='number'?dateLabel(sessionDay(t))+' '+intervalLabel(t):dateLabel(localDay(t)),priceFormatter:v=>exchangeNumber.format(v)},
       crosshair:{mode:LightweightCharts.CrosshairMode.Normal,vertLine:{color:'#91959c'},horzLine:{color:'#91959c'}},
       handleScroll:{mouseWheel:false,pressedMouseMove:true,horzTouchDrag:true,vertTouchDrag:false}
@@ -116,7 +117,7 @@ class ExchangeChart extends HTMLElement {
     };
     const indexBars=()=>{byDay=new Map(bars.map((b,i)=>[b.time,i]));};
     const pricePoint=(b,i)=>candleMode?(b.complete?{time:b.time,open:b.open,high:b.high,low:b.low,close:b.close}:{time:b.time})
-      :{time:b.time,value:b.close,color:i && b.close!==bars[i-1].close?(b.close>bars[i-1].close?exchangeUp:exchangeDown):exchangeFlat};
+      :{time:b.time,value:b.close};
     const volumePoint=(b,i)=>{
       if(!Number.isFinite(b[volume]))return {time:b.time};
       const base=b.complete?b.open:bars[i-1]?.close??b.close;
@@ -169,6 +170,7 @@ class ExchangeChart extends HTMLElement {
       }
       chart.timeScale().applyOptions({timeVisible:Boolean(intraIntervals[interval]),tickMarkFormatter:(t,type,locale)=>
         typeof t==='number'&&type>=LightweightCharts.TickMarkType.Time?intervalLabel(t):null});
+      if(bars.length&&chart.timeScale().width())chart.timeScale().applyOptions({minBarSpacing:chart.timeScale().width()/Math.max(2,bars.length)});
       if(index && interval!=='month' && bars.length>120){
         chart.timeScale().setVisibleLogicalRange({from:bars.length-120,to:bars.length+2});
       }else chart.timeScale().fitContent();
@@ -200,6 +202,15 @@ class ExchangeChart extends HTMLElement {
       finish();
     };
     update();
+    let measured=false;
+    this.sizeObserver=new ResizeObserver(()=>{
+      const width=chart.timeScale().width();
+      if(width>0 && bars.length){
+        chart.timeScale().applyOptions({minBarSpacing:Math.min(width/Math.max(2,bars.length),width/2)});
+        if(!measured){chart.timeScale().fitContent();measured=true;}
+      }
+    });
+    this.sizeObserver.observe(canvas);
     chart.subscribeCrosshairMove(e=>legendAt(byDay.get(localDay(e.time))??bars.length-1));
     if(!index)chart.subscribeClick(e=>{
       const bar=bars[byDay.get(localDay(e.time))];

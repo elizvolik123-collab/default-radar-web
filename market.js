@@ -567,7 +567,7 @@ function radarPanel(r){
   const categories=['Биржевые данные','Отчётность','События выпуска'];
   return '<section id="bondRadar" class="panel radar-panel level-'+esc(r.level)+'"><div class="section-head"><h2>Почему такой риск?</h2><button class="outline" data-ask="bondRadar">Разобрать с помощником</button></div>'+
     (r.factors.length?'<ul>'+facts(r.factors.slice(0,3))+'</ul>':'<p>На выбранную дату подтверждённых оснований недостаточно.</p>')+
-    '<div class="radar-facts"><div class="radar-dial" aria-hidden="true"><i></i><i></i><i></i></div>'+
+    '<div class="radar-facts">'+
     categories.map((label,i)=>'<details name="risk-layer" data-layer="'+i+'"><summary>'+label+'</summary><ul>'+(facts(r.factors.filter(f=>category(f)===i))||'<li>Нет подтверждённых фактов в этой категории.</li>')+'</ul></details>').join('')+'</div>'+
     (r.gaps.length?'<details><summary>Пробелы в данных</summary><ul>'+r.gaps.map(g=>'<li>'+esc(g)+'</li>').join('')+'</ul></details>':'')+
     '<details><summary>Как определяется цвет</summary><p>Скринер и карточка используют общую категорию. Высокий индекс или подтверждённый открытый дефолт выпуска дают красный цвет. Предупреждение модели ближайшего платежа, финансовый фактор, юридическое событие или недавняя просрочка дают как минимум жёлтый. Для зелёного нужны низкий индекс и подтверждение своевременной выплаты. При частичной оценке без предупреждений цвет серый. Прогноз ближайшего платежа рассчитывается отдельно.</p>'+((r.assessment||[]).map(t=>'<p>'+esc(t)+'</p>').join(''))+'</details></section>';

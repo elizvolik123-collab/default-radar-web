@@ -346,10 +346,40 @@ html body .exchange-toolbar button[aria-pressed=true] {color:#243536;background:
 .issue-status dd{margin:2px 0;font-weight:650}
 .issue-reason{margin:8px 0}
 .radar-facts{display:grid;gap:.5rem}
-.radar-dial{position:relative;width:126px;aspect-ratio:1;margin:12px auto;border-radius:50%;border:1px solid var(--line);background:repeating-radial-gradient(circle,var(--surface) 0 13px,var(--line) 14px 15px);transform:perspective(220px) rotateX(36deg);box-shadow:0 8px 0 #5d6b6b}
-.radar-dial i{position:absolute;width:10px;height:10px;border-radius:50%;background:#5d6b6b;left:24%;top:29%}
-.radar-dial i:nth-child(2){left:65%;top:38%}
-.radar-dial i:nth-child(3){left:44%;top:71%}
-.radar-facts:has([data-layer="0"][open]) i:nth-child(1),.radar-facts:has([data-layer="1"][open]) i:nth-child(2),.radar-facts:has([data-layer="2"][open]) i:nth-child(3){background:#f7cbca;box-shadow:0 0 0 3px #5d6b6b}
 @media(max-width:520px){.issue-status{grid-template-columns:1fr;gap:4px}.issue-status div{display:flex;justify-content:space-between;gap:10px}.issue-status dd{text-align:right}#market .searchrow{grid-template-columns:minmax(0,1fr) auto}#market .searchrow .search{grid-column:1/-1}#market #marketMenu[open]{grid-column:1/-1}}
-@media(prefers-reduced-motion:reduce){.radar-dial{transform:none;box-shadow:none}}
+
+.issue-heading {margin:20px 0 12px;color:var(--ink)}
+.issue-heading h2 {margin:0 0 5px;line-height:1.15}
+.issue-heading .mono {color:var(--muted)}
+.issue-layout {display:grid;grid-template-columns:minmax(0,2.3fr) minmax(230px,1fr);align-items:start;gap:14px}
+.issue-layout #price {grid-column:1;grid-row:1;min-width:0}
+.issue-layout #bondOverview {grid-column:2;grid-row:1;min-width:0}
+.issue-layout #bondOverview p:first-child {margin-top:0}
+#contextGroup {grid-column:1/-1;min-width:0}
+#contextGroup .date-wrap {display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:3px 0}
+#contextGroup #chatContext {max-height:none;overflow:visible}
+.page-head>div:first-child {display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px}
+.page-head>div:first-child p {flex-basis:100%;margin:0}
+.optical #optical-nav:focus-within {outline:none}
+#optical-nav button:focus-visible {outline:2px solid var(--teal);outline-offset:-2px}
+#marketTape:is(:hover,:focus-within) .tape-track {animation-play-state:running}
+#marketTape[data-paused] .tape-track {animation-play-state:paused}
+#tapePlay {flex:none;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:4px 8px}
+@media(prefers-reduced-motion:reduce){#marketTape .tape-track{animation:none}#tapePlay{display:none}}
+@media(max-width:760px){
+  .issue-layout{display:flex;flex-direction:column;align-items:stretch;gap:8px}
+  .chat-viewport #contextGroup {grid-row:2}
+  .chat-viewport #chat #askForm #question {height:3.35em;min-height:3.35em;line-height:1.35;padding:4px 8px;box-sizing:border-box}
+  #contextGroup .chat-context {height:auto;max-height:none;display:flex;flex-wrap:wrap;gap:3px 10px}
+  #contextGroup .chat-context strong {white-space:normal}
+}
+#contextGuide {display:none}
+@media(min-width:761px){.issue-layout .issue-status{grid-template-columns:1fr}}
+@media(max-width:760px){
+ #contextGroup #contextGuide{display:inline-block}
+ #contextGroup .date-wrap{height:auto;min-height:0;padding:4px 0;display:flex;flex-flow:row wrap;align-items:center}
+ #contextGroup .date-wrap label{width:auto;flex:0 0 auto}
+ #contextGroup .date-wrap input{width:9em;max-width:45%}
+ #contextGroup .date-wrap label span{display:none}
+ #contextGroup .chat-context{padding:6px 10px}
+}
