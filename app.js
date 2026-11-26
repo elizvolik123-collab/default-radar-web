@@ -32,7 +32,7 @@ function tabs(){
   document.documentElement.classList.toggle('chat-viewport',chat);
   $('market').classList.toggle('hide',chat);$('chat').classList.toggle('hide',!chat);
   document.querySelectorAll('[data-tab]').forEach(b=>{b.classList.toggle('active',b.dataset.tab===state.tab);b.setAttribute('aria-pressed',b.dataset.tab===state.tab);});
-  $('pageTitle').textContent=chat?'Спросить агента':'Рынок облигаций';
+  $('pageTitle').textContent=chat?'Спросить помощника':'Рынок облигаций';
   $('subtitle').textContent=chat?'Разбор выпуска с опорой на первоисточники':'Выпуски, платежи и кредитные события';
   $('asof').value=state.date;
   if(chat)stopBondFeed();else if(data?.request===seq)startBondFeed(data);

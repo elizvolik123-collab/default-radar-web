@@ -300,3 +300,28 @@ html body .exchange-toolbar button[aria-pressed=true] {color:#243536;background:
 @media(max-height:520px) and (max-width:760px){
   .chat-viewport .page-head,.chat-viewport #chatContext,.chat-viewport #mode{display:none}
 }
+@media (max-width:760px){
+  body:not(:has(#chat:not(.hide))) .top{position:static}
+  #market .searchrow{display:grid;grid-template-columns:minmax(0,1fr);align-items:start}
+  #marketMenu nav{position:static;width:100%;max-height:none;margin-top:4px;box-shadow:none}
+  #marketMenu summary{width:fit-content;min-height:40px}
+  #market :is(.grid,.charts-more){grid-template-columns:minmax(0,1fr)}
+  #market :is(.panel,.grid>*,.charts-more>*,.section-head>*,.metrics>*,.bond-highlights>*,.macro-card){min-width:0}
+  #market :is(.section-head,.card-title,.sourcebar,.row-links,.exchange-options){flex-wrap:wrap}
+  #market :is(.section-head,.card-title,.metrics,.bond-highlights,.macro-card,.sourcebar,.docrow){overflow-wrap:anywhere}
+  #market :is(button,select){max-width:100%;white-space:normal}
+  #market :is(.series-plot,exchange-chart){max-width:100%}
+  #market .tablewrap{max-width:100%;overflow-x:auto}
+  #optical-nav .tab-item,.nav nav button{min-width:0;white-space:normal}
+  .optical #optical-nav{max-width:100%}
+}
+@media (max-width:420px){
+  #market :is(.metrics,.bond-highlights,.macro-grid){grid-template-columns:repeat(2,minmax(0,1fr))}
+  #market .section-head{align-items:flex-start}
+}
+@media(max-width:760px){
+  .optical #optical-nav{display:none}
+  .optical .top #optical-nav + nav,.top .wrap.nav > nav{display:grid!important;grid-column:1/-1;grid-row:2;grid-template-columns:1fr 1fr;position:static;width:100%;min-width:0;gap:3px;margin:0}
+  .top .wrap.nav > nav button{justify-content:center;padding:6px 4px;min-height:42px;line-height:1.15}
+  #market .searchrow,#market #marketMenu{position:static;transform:none}
+}

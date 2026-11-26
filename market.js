@@ -531,7 +531,7 @@ function riskExplanation(item){
       (report.original&&report.original!==report.url?' · '+link(report.original,'Отчёт эмитента'):'');
   }
   return '<section class="risk-explanation"><div class="section-head"><h3>Почему такой уровень риска</h3>'+
-    '<button class="outline" data-ask="bondRadar">Разобрать с ИИ</button></div><ul>'+list+'</ul>'+
+    '<button class="outline" data-ask="bondRadar">Разобрать с помощником</button></div><ul>'+list+'</ul>'+
     '<p><b>Отчётность эмитента</b><br>'+financial+'</p>'+riskDynamics(item)+'</section>';
 }
 function bondHighlights(item){
