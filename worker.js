@@ -2,10 +2,13 @@
 importScripts('python/pyodide.js');
 
 async function openMarket() {
+  self.postMessage({startup:'Загружаем архив рынка…'});
   const response = await fetch('market.zip');
   if (!response.ok) throw Error('Не удалось загрузить опубликованные данные.');
+  self.postMessage({startup:"Запускаем движок аналитики…"});
   const runtime = await loadPyodide({indexURL: new URL('python/', self.location.href).href});
   await runtime.loadPackage('sqlite3');
+  self.postMessage({startup:'Открываем каталог и документы…'});
   runtime.unpackArchive(await response.arrayBuffer(), 'zip', {extractDir: '/radar'});
   runtime.runPython("import sys; sys.path.insert(0, '/radar'); from browser_api import dispatch");
   return runtime.globals.get('dispatch');

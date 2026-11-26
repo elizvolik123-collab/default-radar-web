@@ -340,3 +340,16 @@ html body .exchange-toolbar button[aria-pressed=true] {color:#243536;background:
   .chat-viewport .page-head,.chat-viewport #chatContext:empty{display:none}
   #market #query,.chat-viewport #question{font-size:16px}
 }
+.issue-status{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:8px 0}
+.issue-status div{padding:6px 8px;background:var(--surface-alt);border-radius:8px}
+.issue-status dt{font-size:.8rem;color:var(--muted)}
+.issue-status dd{margin:2px 0;font-weight:650}
+.issue-reason{margin:8px 0}
+.radar-facts{display:grid;gap:.5rem}
+.radar-dial{position:relative;width:126px;aspect-ratio:1;margin:12px auto;border-radius:50%;border:1px solid var(--line);background:repeating-radial-gradient(circle,var(--surface) 0 13px,var(--line) 14px 15px);transform:perspective(220px) rotateX(36deg);box-shadow:0 8px 0 #5d6b6b}
+.radar-dial i{position:absolute;width:10px;height:10px;border-radius:50%;background:#5d6b6b;left:24%;top:29%}
+.radar-dial i:nth-child(2){left:65%;top:38%}
+.radar-dial i:nth-child(3){left:44%;top:71%}
+.radar-facts:has([data-layer="0"][open]) i:nth-child(1),.radar-facts:has([data-layer="1"][open]) i:nth-child(2),.radar-facts:has([data-layer="2"][open]) i:nth-child(3){background:#f7cbca;box-shadow:0 0 0 3px #5d6b6b}
+@media(max-width:520px){.issue-status{grid-template-columns:1fr;gap:4px}.issue-status div{display:flex;justify-content:space-between;gap:10px}.issue-status dd{text-align:right}#market .searchrow{grid-template-columns:minmax(0,1fr) auto}#market .searchrow .search{grid-column:1/-1}#market #marketMenu[open]{grid-column:1/-1}}
+@media(prefers-reduced-motion:reduce){.radar-dial{transform:none;box-shadow:none}}

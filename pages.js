@@ -8,6 +8,7 @@
   const mode=()=>endpoint||groq?'Ассистент радара · ответы по источникам':'Встроенный поиск по документам и показателям · без регистрации';
 
   worker.onmessage = ({data}) => {
+    if(data.startup){document.querySelector("#notice").textContent=data.startup;return;}
     const job = pending.get(data.id);
     if (!job) return;
     if(data.stage){agentStage(data.stage,true);return;}

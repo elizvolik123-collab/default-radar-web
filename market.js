@@ -562,9 +562,14 @@ function couponPanel(item){
 }
 function radarPanel(r){
   if(!r)return '';
-  const factors=r.factors.slice(0,6).map(f=>'<li><b>'+esc(f.scope)+'</b> · '+esc(f.reason)+' '+link(f.url,dt(f.day))+'</li>').join('');
-  return '<section id="bondRadar" class="panel radar-panel level-'+esc(r.level)+'"><div class="section-head"><div><small>Кредитный риск выпуска</small><h2><span class="signal-dot"></span>'+esc(r.label)+'</h2></div><small>Оценка на '+dt(r.asof)+'</small></div><p>'+(r.due?'Ближайший известный платёж — '+dt(r.due)+'.':'Срок ближайшего платежа в архиве отсутствует.')+'</p>'+
-    (factors?'<ul>'+factors+'</ul>':'')+(r.gaps.length?'<p class="sub">'+r.gaps.map(esc).join(' ')+'</p>':'')+
+  const category=f=>/финанс|банк|отч[её]т/i.test(f.scope)?1:/рынок|бирж|модел/i.test(f.scope)?0:2;
+  const facts=rows=>rows.map(f=>'<li>'+esc(f.reason)+(f.url?' '+link(f.url,'Источник · '+dt(f.day)):'')+'</li>').join('');
+  const categories=['Биржевые данные','Отчётность','События выпуска'];
+  return '<section id="bondRadar" class="panel radar-panel level-'+esc(r.level)+'"><div class="section-head"><h2>Почему такой риск?</h2><button class="outline" data-ask="bondRadar">Разобрать с помощником</button></div>'+
+    (r.factors.length?'<ul>'+facts(r.factors.slice(0,3))+'</ul>':'<p>На выбранную дату подтверждённых оснований недостаточно.</p>')+
+    '<div class="radar-facts"><div class="radar-dial" aria-hidden="true"><i></i><i></i><i></i></div>'+
+    categories.map((label,i)=>'<details name="risk-layer" data-layer="'+i+'"><summary>'+label+'</summary><ul>'+(facts(r.factors.filter(f=>category(f)===i))||'<li>Нет подтверждённых фактов в этой категории.</li>')+'</ul></details>').join('')+'</div>'+
+    (r.gaps.length?'<details><summary>Пробелы в данных</summary><ul>'+r.gaps.map(g=>'<li>'+esc(g)+'</li>').join('')+'</ul></details>':'')+
     '<details><summary>Как определяется цвет</summary><p>Скринер и карточка используют общую категорию. Высокий индекс или подтверждённый открытый дефолт выпуска дают красный цвет. Предупреждение модели ближайшего платежа, финансовый фактор, юридическое событие или недавняя просрочка дают как минимум жёлтый. Для зелёного нужны низкий индекс и подтверждение своевременной выплаты. При частичной оценке без предупреждений цвет серый. Прогноз ближайшего платежа рассчитывается отдельно.</p>'+((r.assessment||[]).map(t=>'<p>'+esc(t)+'</p>').join(''))+'</details></section>';
 }
 function filingPanel(item){

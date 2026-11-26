@@ -21,7 +21,7 @@ const chatKey=()=>[state.mode,state.id,state.date,state.time].join('|');
 const params=()=>new URLSearchParams(Object.entries(state).filter(([,v])=>v!=='' && v!=null));
 function save(push=false){const query=params();if(state.mode==='live' && state.date===moscowDay() && !state.time)query.delete('date');const url='?'+query;if(location.search!==url)history[push?'pushState':'replaceState']({},'',url);}
 async function api(url,body){if(window.pagesRadar)return window.pagesRadar.request(url,body);const r=await fetch(url,body?{method:'POST',headers:{'Content-Type':'application/json','X-Radar':'1'},body:JSON.stringify(body)}:{});const d=await r.json();if(!r.ok)throw Error(d.error||'Сервер недоступен');return d;}
-function notice(msg){$('notice').innerHTML=msg?'<div class="strip">'+esc(msg)+'</div>':'';}
+function notice(msg){$('notice').innerHTML=msg?'<div class="strip">'+esc(msg)+(msg.startsWith('Браузер не смог')||msg.startsWith('Не удалось прочитать')?' <button data-action="retry">Повторить загрузку</button>':'')+'</div>':'';}
 function scrollToPart(id){requestAnimationFrame(()=>$(id)?.scrollIntoView({block:'start'}));}
 function modal(title,html){$('modalTitle').textContent=title;$('modalBody').innerHTML=html;if(!$('modal').open)$('modal').showModal();}
 function quitModal(){$('modal').close();}
@@ -130,12 +130,13 @@ function timeline(){
 function statusLabel(){const recent=data.registry?.[0],outcome=data.outcomes?.[0];if(outcome&&(!data.payment||outcome.due>data.payment.date)&&(!recent||outcome.due>recent.due))return [(outcome.late?'Просрочка':'Выплата в срок')+' · '+dt(outcome.due,false),outcome.late?'red':'green'];if(recent && (!data.payment||recent.due>data.payment.date))return [recent.status+' · '+dt(recent.due,false),'red'];if(data.payment)return [data.payment.status,data.payment.status.includes('опозданием')?'amber':'green'];const ev=data.events.find(x=>x.kind==='Просрочка');return ev?['Нарушение срока','amber']:data.events.some(x=>x.kind==='Рейтинг')?['Есть рейтинговый сигнал','amber']:['Исполнение не подтверждено',''];}
 function overview(){
   const b=data.bond,[label,color]=statusLabel(), next=data.next;
-  return '<div id="bondOverview" class="panel bond-summary"><div class="card-title"><div class="identity"><div class="emblem">'+icon('bond')+'</div><div><h2>'+esc(b.name)+'</h2><div class="mono">'+esc(b.isin||b.secid)+'</div></div></div><span class="badge '+color+'">'+esc(label)+'</span></div>'+paymentBrief(data)+bondHighlights(data)+riskExplanation(data)+'<div class="metrics">'+[
-    ['Эмитент',b.issuer_name,b.inn?'ИНН '+b.inn:'ИНН не указан'],
-    ['Номинал',b.nominal!=null?fmt(b.nominal)+' '+(cashCurrency(b.currency)):'—',b.nominal==null?'Нет данных на срез':'На одну облигацию'],
-    ['Погашение',dt(b.maturity),b.maturity?'По параметрам выпуска':'Нет данных на срез'],
-    ['Ближайший платёж',next?dt(next.date):'—',next?next.label:'Нет датированного графика']
-  ].map(([k,v,n])=>'<div><small>'+esc(k)+'</small><strong>'+esc(v)+'</strong><small>'+esc(n)+'</small></div>').join('')+'</div><div class="sourcebar"><span>Срез на '+dt(state.date)+(state.time?' · '+esc(state.time):' · конец дня')+' МСК</span><div class="row-links">'+link(b.source,'Справочник выпуска')+'<button data-action="details">Реквизиты и режимы</button></div></div></div>';
+  const f=data.forecast, radar=data.radar;
+  const signal=f?.state==='signal'?(f.alert?'Есть предупреждение':'Порог предупреждения не достигнут'):'Недостаточно данных для оценки';
+  const fact=radar?.factors?.find(f=>f.url);
+  return '<section id="bondOverview" class="panel bond-summary"><h2>'+esc(b.name)+'</h2><span class="mono">'+esc(b.isin||b.secid)+'</span><p><b>Ближайшая выплата</b> · '+(next?esc(next.kind)+' · '+dt(next.date):'Дата неизвестна')+'</p><dl class="issue-status">'+
+    [['Что произошло',label,color],['Риск выпуска',radar?.label||'Недостаточно данных',''],['Прогноз платежа',signal,f?.state==='signal'&&f.alert?'red':'']].map(([k,v,t])=>'<div><dt>'+k+'</dt><dd class="'+t+'">'+esc(v)+'</dd></div>').join('')+'</dl>'+
+    (fact?'<p class="issue-reason">'+esc(fact.reason)+' '+link(fact.url,dt(fact.day))+'</p>':'')+
+    '<a href="#bondRadar">Почему такой риск?</a></section>';
 }
 function cashCurrency(c){return ['RUB','SUR','RUR'].includes(c)?'₽':c||'';}
 const directionClass=delta=>delta==null||delta===0?'trade-flat':delta>0?'trade-up':'trade-down';
@@ -197,7 +198,7 @@ function news(){
 function render(){
   if(!data)return;
   const list='<section class="panel"><div class="section-head"><h3>Другие выпуски эмитента</h3><button class="textbtn" data-action="search">Весь каталог →</button></div><div class="tablewrap"><table><thead><tr><th>Выпуск</th><th>ISIN</th><th>Последняя сохранённая сделка</th></tr></thead><tbody>'+data.shortlist.map(b=>'<tr><td><button data-bond="'+esc(b.id)+'">'+esc(b.name)+'</button></td><td class="mono">'+esc(b.isin)+'</td><td>'+dt(b.last_trade)+'</td></tr>').join('')+'</tbody></table></div></section>';
-  $('detail').innerHTML='<button class="textbtn" data-action="home">← Обзор рынка</button>'+timeline()+overview()+expertPanel(data)+radarPanel(data.radar)+defaultEvidence(data)+paymentJournal(data)+couponPanel(data)+forecastPanel(data.forecast)+financialPanel(data.financials||[])+filingPanel(data)+'<div class="grid">'+price()+calendar()+'</div><div class="charts-more">'+payment()+documents()+'</div>'+outcomeList()+riskPanel()+news()+extraAnalytics(data)+(data.shortlist.length?list:'');
+  $('detail').innerHTML='<button class="textbtn" data-action="home">← Обзор рынка</button>'+overview()+price()+radarPanel(data.radar)+paymentBrief(data)+bondHighlights(data)+forecastPanel(data.forecast)+expertPanel(data)+couponPanel(data)+financialPanel(data.financials||[])+calendar()+paymentJournal(data)+defaultEvidence(data)+filingPanel(data)+timeline()+'<div class="charts-more">'+payment()+documents()+'</div>'+outcomeList()+riskPanel()+news()+extraAnalytics(data)+(data.shortlist.length?list:'');
   renderBondQuote(data);renderChat();
 }
 function docModal(id){const d=data.documents.find(x=>x.id===id);if(!d)return;state.event=id;save();modal(d.title,'<p class="meta">'+esc(d.publisher)+' · '+esc(d.kind)+'</p><p class="modalbody">'+esc(d.body)+'</p><div class="doclist"><div class="lineitem"><span>Дата события</span>'+dt(d.occurred)+'</div><div class="lineitem"><span>Опубликовано</span>'+dt(d.published)+(d.published.includes('T')?' '+esc(d.published.slice(11,16))+' МСК':' · время не указано')+'</div><div class="lineitem"><span>Сохранено</span>'+dt(d.loaded)+'</div></div><div class="drawer-actions">'+link(d.url,'Открыть первоисточник','lightbtn')+(id==='ncr'?'<a class="lightbtn" href="documents/nkr-20260407.pdf" target="_blank" rel="noopener">Сохранённый PDF ↗</a>':'')+'<button class="primary" data-ask="doc">Объяснить в чате</button></div>');}
@@ -288,6 +289,7 @@ document.addEventListener('click',async event=>{
  if(a.choice){const m=chats.get(chatKey())?.[+a.message];state.id=a.choice;state.specific='1';state.week='';state.point='';state.event='';await load(true);ask(m?.retry||'Сколько по моему купону выплатили в срок?',a.choice);return;}
  if(a.return){const message=a.message!==undefined?(chats.get(chatKey())||[])[+a.message]:null;if(message?.view){state={...message.view,id:message.id,section:a.return,tab:'market'};await load(true);scrollToPart(a.return);return;}state.tab='market';state.section=a.return;if(a.id&&a.id!==state.id){state.id=a.id;state.point='';state.week='';state.event='';await load(true);}else{save(true);tabs();}scrollToPart(a.return);return;}
  if(a.bond){selectBond(a.bond);return;}if(a.offset!==undefined){offset=+a.offset;searchList();return;}
+ if(a.action==='retry'){location.reload();return;}
  if(a.action==='home'){state={...initial,date:state.date,mode:state.mode};await load(true);return;}
  if(a.action==='details'){detailsModal();return;}
  if(a.action==='search'){$('query').focus();openSearch();return;}
