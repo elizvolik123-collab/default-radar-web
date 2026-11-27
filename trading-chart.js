@@ -147,6 +147,11 @@ class ExchangeChart extends HTMLElement {
       legendAt(selection??bars.length-1);
       setMarkers();
     };
+    const fitBars=()=>{
+      // Reserve space for the next period so the two-bar minimum never forces a pan.
+      if(intraIntervals[interval]&&bars.length===1)chart.timeScale().setVisibleLogicalRange({from:0,to:1});
+      else chart.timeScale().fitContent();
+    };
     const update=()=>{
       markers?.detach();markers=null;
       for (const s of [price,vol,closeOnly]) if(s)chart.removeSeries(s);
@@ -168,12 +173,15 @@ class ExchangeChart extends HTMLElement {
         vol.priceScale().applyOptions({scaleMargins:{top:.81,bottom:.005}});
         vol.setData(bars.map(volumePoint));
       }
-      chart.timeScale().applyOptions({timeVisible:Boolean(intraIntervals[interval]),tickMarkFormatter:(t,type,locale)=>
+      const intraday=Boolean(intraIntervals[interval]);
+      // With one observed intraday bar, the fitted range includes empty space.
+      // Pinning both edges otherwise moves that range when a second bar arrives.
+      chart.timeScale().applyOptions({timeVisible:intraday,fixLeftEdge:!intraday,fixRightEdge:!intraday,tickMarkFormatter:(t,type,locale)=>
         typeof t==='number'&&type>=LightweightCharts.TickMarkType.Time?intervalLabel(t):null});
       if(bars.length&&chart.timeScale().width())chart.timeScale().applyOptions({minBarSpacing:chart.timeScale().width()/Math.max(2,bars.length)});
       if(index && interval!=='month' && bars.length>120){
         chart.timeScale().setVisibleLogicalRange({from:bars.length-120,to:bars.length+2});
-      }else chart.timeScale().fitContent();
+      }else fitBars();
       selection=undefined;finish();
     };
     this.refreshRows=()=>{
@@ -197,7 +205,7 @@ class ExchangeChart extends HTMLElement {
       if(previous.length&&range&&byDay.has(anchor)){
         const delta=byDay.get(anchor)-left;
         scale.setVisibleLogicalRange({from:range.from+delta,to:range.to+delta});
-      }else if(!previous.length&&next.length)scale.fitContent();
+      }else if(!previous.length&&next.length)fitBars();
       selection=selected===previous.at(-1)?.time?undefined:byDay.get(selected);
       finish();
     };
@@ -207,7 +215,7 @@ class ExchangeChart extends HTMLElement {
       const width=chart.timeScale().width();
       if(width>0 && bars.length){
         chart.timeScale().applyOptions({minBarSpacing:Math.min(width/Math.max(2,bars.length),width/2)});
-        if(!measured){chart.timeScale().fitContent();measured=true;}
+        if(!measured){fitBars();measured=true;}
       }
     });
     this.sizeObserver.observe(canvas);
@@ -224,7 +232,7 @@ class ExchangeChart extends HTMLElement {
     };
     this.onclick=e=>{
       const el=e.target.closest('button');if(!el)return;
-      if(el.hasAttribute('data-fit')){chart.timeScale().fitContent();return;}
+      if(el.hasAttribute('data-fit')){fitBars();return;}
       if(el.hasAttribute('data-latest')){chart.timeScale().scrollToRealTime();legendAt(bars.length-1);return;}
       if(el.hasAttribute('data-events'))showEvents=!showEvents;
       interval=el.dataset.interval||interval;style=el.dataset.chartStyle||style;volume=el.dataset.chartVolume||volume;
