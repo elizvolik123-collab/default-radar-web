@@ -111,6 +111,24 @@ function paymentBrief(item){
     (disagree?'<p>Оценки расходятся. Прогноз ближайшей выплаты использует цену и её изменение. Экспертный индекс учитывает также раскрытия и факторы состояния эмитента.</p>':'')+
     '<p><b>Полнота данных.</b> '+(q?states[q.previous]+' '+docs+' '+(q.federal?'Корпоративная отчётность к ОФЗ неприменима.':q.fresh?'Есть свежие сопоставимые показатели отчётности.':'Не хватает свежих сопоставимых показателей отчётности.')+(q.terms?'':' Параметры ближайшего купона неполны.'):'Для этого выпуска полнота данных на выбранную дату не оценена.')+'</p></section>';
 }
+function cohortResults(study){
+  if(!study)return '';
+  const rows=key=>study.groups.map(g=>{
+    const m=g[key],control=g.name==='В срок';
+    return '<tr><th scope="row">'+esc(g.name)+'</th><td>'+fmt(g.total)+'</td><td>'+fmt(g.issuers)+'</td><td>'+fmt(m.scored)+'</td><td>'+fmt(g.total-m.scored)+'</td><td>'+(m.scored?fmt(m.signals)+(control?' ложн.':''):'—')+'</td><td>'+(m.scored?fmt(m.quiet):'—')+'</td></tr>';
+  }).join('');
+  const table=key=>'<div class="tablewrap" tabindex="0" aria-label="Результаты по группам выпусков"><table><thead><tr>'+
+    ['Исход','Выпуски','Эмитенты','Оценено','Без оценки','Сигнал','Без сигнала'].map(s=>'<th scope="col">'+s+'</th>').join('')+'</tr></thead><tbody>'+rows(key)+'</tbody></table></div>';
+  return '<section class="panel" id="cohortStudy"><h2>Как модель распознавала дефолты</h2>'+
+    '<p>Проверка за семь дней до платежа. Дата оценки — с '+dt(study.cutoff)+', исходы собраны по '+dt(study.asof)+'. Каждый выпуск входит только в одну группу.</p>'+
+    '<h3>Когда срок выплаты был известен заранее</h3>'+table('alert')+
+    '<p>У проблемных выпусков «без сигнала» означает пропуск. В группе «В срок» срабатывание означает ложную тревогу. В колонке «Без оценки» — выпуски, для которых не хватило условий для прогноза.</p>'+
+    '<details><summary>Что показывали котировки до нарушения</summary><p>Повторный расчёт с известной сегодня датой выплаты. Он показывает, распознавала ли модель ценовые признаки, даже если в архиве тогда не было графика.</p>'+table('price_alert')+
+    '<p>Доля срабатываний при одинаковом весе каждого оценённого эмитента</p><ul>'+study.groups.map(g=>'<li>'+esc(g.name)+' — '+(g.price_alert.issuer_mean==null?'нет оценки':fmt(100*g.price_alert.issuer_mean,1)+'% ('+fmt(g.price_alert.issuers)+' эмит.)')+'</li>').join('')+'</ul></details>'+
+    '<details><summary>Как выбраны выпуски</summary><p>Рублёвые выпуски режима TQCB. Для проблемной бумаги берём первую известную просрочку. Группу определяет наиболее серьёзный статус выпуска в реестре Мосбиржи на дату исследования. Для контроля берём первый подтверждённый своевременный платёж в тестовом периоде по выпускам без известной просрочки. При совпадении дат первым берём купон.</p>'+
+    '<p>Веса модели и порог сохранены. Использованы торги до дня прогноза. Наличие нескольких выпусков у одного эмитента и доступность документов влияют на состав выборки. Эти доли нельзя переносить на весь рынок.</p></details>'+
+    '<p><a href="research/cohort_validation.csv" download>Скачать проверку по ISIN с документами и котировками · CSV</a></p></section>';
+}
 function marketHome(m){
   const research=m.research;
   refreshTape([...m.series,...m.bonds]);
@@ -125,7 +143,7 @@ function marketHome(m){
   const summary='<section class="panel"><h2>Покрытие анализа на '+dt(coverage.asof)+'</h2><p><strong>'+fmt(coverage.full)+' из '+fmt(coverage.scored)+'</strong> выпусков с прогнозом доступны для полного разбора. До '+dt(dtadd(state.date,7))+' включительно предстоят платежи по '+fmt(coverage.total-coverage.outside_window)+' выпускам. Модель рассчитала прогноз для '+fmt(coverage.scored)+' из них. Всего в каталоге '+fmt(coverage.total)+'.</p></section>'+attentionList(m.attention||[])+'<section class="panel">'+breakdown+auditLink+'<details><summary>Как считаем полный разбор</summary><p>Считаем уникальные выпуски с рыночной ценой, прогнозом на ближайшие семь дней, НКД и суммой ближайшего купона, подтверждённой датой исполнения предыдущего известного платежа и двумя сопоставимыми отчётными периодами. Последний период закончился не более 370 дней назад.</p>'+coverage.ids.map(id=>'<button data-bond="'+esc(id)+'">'+esc(id)+'</button>').join('')+'</details>'+
     (first?'<h3>Предупреждение о первой просрочке</h3><p>За семь дней до срока модель выявила <strong>'+fmt(first.tp)+' из '+fmt(first.late)+'</strong> просроченных купонов и пропустила <strong>'+fmt(first.fn)+'</strong>. Из '+fmt(first.tp+first.fp)+' предупреждений подтвердились '+fmt(first.tp)+(first.tp+first.fp?' ('+fmt(100*first.tp/(first.tp+first.fp),1)+'%)':'')+', ложных — '+fmt(first.fp)+'. В выборке '+fmt(first.n)+' платежей. Проверка за '+dt(research.test.first)+' — '+dt(research.test.last)+'. Учитываются купоны на первую известную дату просрочки каждого эмитента.</p>':'')+'</section>';
   $('marketHome').innerHTML=summary+marketDashboard(m)+'<section id="paymentCalendar" class="panel"><h2>Календарь облигационных выплат</h2><div class="calendar-body"></div></section>'+
-    (research?'<details id="marketWatch" class="panel"><summary>Сигналы риска по выплатам на семь дней</summary><div aria-live="polite"></div></details>':'')+newsFeed(m)+methodology;
+    (research?'<details id="marketWatch" class="panel"><summary>Сигналы риска по выплатам на семь дней</summary><div aria-live="polite"></div></details>':'')+cohortResults(research?.cohorts)+newsFeed(m)+methodology;
   initPaymentCalendar($('paymentCalendar').querySelector('.calendar-body'));
   const watch=$('marketWatch');
   if(watch)watch.ontoggle=async()=>{
@@ -174,14 +192,21 @@ function violationStatus(item){
   ];
   if(item.payment?.overdue>0)evidence.push({date:item.payment.date,published:item.payment.published,url:item.payment.url});
   const last=evidence.filter(v=>v.url&&v.published).sort((a,b)=>b.published.localeCompare(a.published))[0];
-  return last?['Подтверждено · '+dt(last.date),'red',last]:['Нет подтверждения на дату среза','',null];
+  return last?['Зафиксировано · '+dt(last.date),'',last]:['Нет подтверждения на дату среза','',null];
+}
+function decisionBanner(conclusion){
+  if(!conclusion)return '';
+  const symbols={danger:'!',watch:'!',low:'✓',neutral:'i',unknown:'?'};
+  const tone=Object.hasOwn(symbols,conclusion.tone)?conclusion.tone:'unknown';
+  return '<section class="credit-conclusion cc-'+tone+'" aria-label="Вывод по кредитному риску"><span class="cc-symbol" aria-hidden="true">'+symbols[tone]+'</span><div><small>Вывод по кредитному риску</small><h3>'+esc(conclusion.title)+'</h3><p>'+esc(conclusion.detail)+'</p>'+
+    (conclusion.source?link(conclusion.source,'Основание · '+dt(conclusion.published)):'')+'</div></section>';
 }
 function overview(){
   const b=data.bond,[label,color,evidence]=violationStatus(data), next=data.next;
   const f=data.forecast, radar=data.radar;
-  const signal=f?.state==='signal'?(f.alert?'Есть предупреждение':'Порог предупреждения не достигнут'):'Недостаточно данных для оценки';
+  const signal=f?.state==='signal'?(f.alert?'Есть предупреждение':'Порог предупреждения не достигнут'):(f?.reason||'Недостаточно данных для оценки');
   const fact=radar?.factors?.find(f=>f.url);
-  return '<header class="issue-heading"><h2>'+esc(b.name)+'</h2><span class="mono">'+esc(b.isin||b.secid)+' · Срез на '+dt(state.date)+'</span></header><div class="issue-layout"><section id="bondOverview" class="panel bond-summary"><p><b>Ближайшая выплата</b> · '+(next?esc(next.kind)+' · '+dt(next.date)+(next.per_unit!=null?' · '+fmt(next.per_unit)+' '+esc(cashCurrency(next.currency))+' на бумагу':''):'Дата неизвестна')+'</p><dl class="issue-status">'+
+  return '<header class="issue-heading"><h2>'+esc(b.name)+'</h2><span class="mono">'+esc(b.isin||b.secid)+' · Срез на '+dt(state.date)+'</span></header>'+decisionBanner(radar?.conclusion)+'<div class="issue-layout"><section id="bondOverview" class="panel bond-summary"><p><b>Ближайшая выплата</b> · '+(next?esc(next.kind)+' · '+dt(next.date)+(next.per_unit!=null?' · '+fmt(next.per_unit)+' '+esc(cashCurrency(next.currency))+' на бумагу':''):'Дата неизвестна')+'</p><dl class="issue-status">'+
     [['Платёжное нарушение',label,color],['Риск выпуска',radar?.label||'Недостаточно данных',''],['Прогноз платежа',signal,f?.state==='signal'&&f.alert?'red':'']].map(([k,v,t])=>'<div><dt>'+k+'</dt><dd class="'+t+'">'+esc(v)+(k==='Платёжное нарушение'&&evidence?' '+link(evidence.url,'Документ · '+dt(evidence.published)):'')+'</dd></div>').join('')+'</dl>'+
     (fact?'<p class="issue-reason">'+esc(fact.reason)+' '+link(fact.url,dt(fact.day))+'</p>':'')+
     '<a href="#bondRadar">Почему такой риск?</a></section>';

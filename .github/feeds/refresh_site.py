@@ -84,6 +84,9 @@ def run():
             if outcome.returncode:
                 print("::warning::Часть источников недоступна. Для них сохранены последние датированные значения.")
             subprocess.run([sys.executable,"payment_journal.py"],cwd=work,check=True)
+        shutil.copy2(tools/"cohort_validation.py",work/"cohort_validation.py")
+        subprocess.run([sys.executable,"cohort_validation.py"],cwd=work,check=True)
+        shutil.copy2(work/"data/cohort_validation.csv",stage/"research/cohort_validation.csv")
         # The ingestion error queue is operational metadata, not public market data.
         with closing(sqlite3.connect(work/"data/payment_history.sqlite3")) as history:
             history.execute("DROP TABLE IF EXISTS downloads");history.commit()
