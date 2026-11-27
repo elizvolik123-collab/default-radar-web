@@ -4,7 +4,7 @@ import os
 from contextlib import closing
 from pathlib import Path
 
-from credit_data import issuer_reports, issuer_filings, market, open_data, reviewed_statements
+from credit_data import fns_totals, issuer_reports, issuer_filings, market, open_data, reviewed_statements
 from storage import connect, now
 
 
@@ -21,13 +21,15 @@ def export(out):
         available={r[0] for r in facts.execute("SELECT DISTINCT issuer FROM reports")}
         available.update(r[0] for r in facts.execute("SELECT DISTINCT issuer FROM filings WHERE removed=0"))
         available.update(r["inn"] for r in reviewed_statements())
+        if facts.execute("SELECT 1 FROM sqlite_master WHERE name='fns_totals'").fetchone():
+            available.update(r[0] for r in facts.execute("SELECT DISTINCT issuer FROM fns_totals"))
         directory=[]
         active={r[0] for r in catalog.execute("SELECT DISTINCT issuer FROM bonds WHERE traded=1")}
         for inn,name in catalog.execute("SELECT id,name FROM issuers ORDER BY id"):
             relative="fundamentals/"+inn+".json" if inn in available and inn.isdigit() else None
             reports=issuer_reports(inn,at) if relative else []
             if relative:
-                write(root/relative,{"issuer":inn,"name":name,"asof":at[:10],"reports":reports,"filings":issuer_filings(inn,at)})
+                write(root/relative,{"issuer":inn,"name":name,"asof":at[:10],"reports":reports,"fns":fns_totals(inn,at),"filings":issuer_filings(inn,at)})
             directory.append({"issuer":inn,"name":name,"report":relative,"active":inn in active,
                               "latest_statement":reports[0]["published"] if reports else None})
         write(root/"issuers.json",{"date":at[:10],"issuers":directory})

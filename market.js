@@ -70,12 +70,14 @@ document.addEventListener('click',e=>{
 function initPaymentCalendar(root){
   const overdue=document.createElement('details');
   overdue.innerHTML='<summary>Открытые просрочки за все месяцы</summary><div aria-live="polite"></div>';
-  if(state.date>='2026-11-26'){
+  for(const [day,count] of [['2026-11-27',31],['2026-11-26',63]]){
+    if(state.date<day || (state.date===day && state.time))continue;
     const review=document.createElement('a');
-    review.href='research/payment_review_2026-11-26.csv';
-    review.download='payment_review_2026-11-26.csv';
-    review.textContent='Сверка предыдущих выплат по 63 выпускам · 26 ноября 2026 · CSV';
-    root.before(review);
+    review.download='payment_review_'+day+'.csv';
+    review.href='research/'+review.download;
+    review.textContent='Сверка выплат · '+dt(day)+' · '+count+' '+(count===31?'выпуск':'выпуска')+' · CSV';
+    const line=document.createElement('p');
+    line.append(review);root.before(line);
   }
   root.before(overdue);
   overdue.ontoggle=async()=>{
@@ -119,7 +121,7 @@ function initPaymentCalendar(root){
             return link(e.url,publisher+' · '+dt(e.published));
           }).join(' ');
           const title=p.in_catalog===false?'<strong>'+esc(p.name)+'</strong><small>Вне аналитического каталога</small>':'<button data-bond="'+esc(p.id)+'">'+esc(p.name)+'</button>';
-          return '<article class="cal-payment"><div>'+title+'<small>'+esc(p.kind)+' · '+esc(p.id)+'</small></div><strong class="pay-state '+p.status+'">'+labels[p.status]+'</strong><p>'+(p.actual?'Фактическая дата выплаты · '+dt(p.actual):p.conflict?'Источники расходятся. Дата исполнения требует сверки.':p.status==='planned'?'Плановая дата · '+dt(day):'Фактическая дата не подтверждена.')+'</p><div>'+(p.source?link(p.source,'График выплат')+' ':'')+evidence+'</div></article>';
+          return '<article class="cal-payment"><div>'+title+'<small>'+esc(p.kind)+' · '+esc(p.id)+'</small></div><strong class="pay-state '+p.status+'">'+labels[p.status]+'</strong><p>'+(p.actual?(p.status==='ontime'&&p.actual>day?'Дата по графику · '+dt(day)+'. ':'')+'Фактическая дата выплаты · '+dt(p.actual):p.conflict?'Источники расходятся. Дата исполнения требует сверки.':p.status==='planned'?'Плановая дата · '+dt(day):'Фактическая дата не подтверждена.')+'</p><div>'+(p.source?link(p.source,'График выплат')+' ':'')+evidence+'</div></article>';
         }).join('')||'<p>В каталоге нет выплат на эту дату.</p>');
       }
       content.querySelectorAll('[data-day]').forEach(b=>b.onclick=()=>select(b.dataset.day));select(selected);
@@ -610,19 +612,26 @@ function paymentJournal(item){
   }).join('');
   return '<section class="panel"><details id="paymentJournal"><summary>Журнал наблюдений по выплатам</summary><div class="tablewrap"><table><thead><tr><th>День наблюдения</th><th>Обязательство</th><th>Срок</th><th>Сведения</th><th>На бумагу</th><th>Дата исполнения</th><th>Основание</th></tr></thead><tbody>'+evidence+'</tbody></table></div></details></section>';
 }
+function fnsPanel(record){
+  if(!record)return '';
+  return '<section class="panel"><h3>Доходы и расходы по данным ФНС · '+esc(record.period)+'</h3><div class="metrics">'+
+    [['Доходы',record.income],['Расходы',record.expense]].map(([label,value])=>'<div><small>'+label+'</small><strong>'+fmt(Number(value)/1e6,3)+' млн ₽</strong></div>').join('')+
+    '</div><p class="sub">Годовые суммы по юрлицу, ИНН '+esc(record.issuer)+'. Для оценки ликвидности нужны баланс и отчёт о движении денежных средств.</p><div class="sourcebar">'+
+    link(record.url,'Выгрузка ФНС · '+dt(record.published))+'</div><details><summary>Запись в первоисточнике</summary><p>'+esc(record.member)+' · '+esc(record.document)+'</p></details></section>';
+}
 function financialPanel(reports,selectedPeriod){
   if(!reports.length)return '<section class="panel" id="fundamentals"><h3>Финансовое состояние эмитента</h3><p class="sub">На выбранную дату отсутствуют проверенные числовые показатели по этому ИНН. Доступные публикации приведены в разделе «Документы кредитного анализа».</p></section>';
-  const r=reports.find(v=>v.period+'|'+v.standard===selectedPeriod)||reports[0],priority=['current_ratio','cash_cover','interest_cover','working_capital','short_debt_share','net_leverage','ocf','fcf','net_income','roe'];
+  const r=reports.find(v=>v.period+'|'+v.standard===selectedPeriod)||reports[0],priority=['current_ratio','cash_cover','interest_cover','total_capital_adequacy_ratio','core_capital_adequacy_ratio','instant_liquidity_ratio','bank_current_liquidity_ratio','working_capital','short_debt_share','net_leverage','ocf','fcf','net_income','roe'];
   const rows=Object.entries(r.metrics);
-  const metrics=priority.filter(k=>r.metrics[k]).slice(0,7).map(k=>r.metrics[k]);
+  const metrics=[...new Set([...priority,...Object.keys(r.metrics)])].filter(k=>r.metrics[k]).slice(0,7).map(k=>r.metrics[k]);
   const key=['ocf','net_income','revenue'].find(k=>r.metrics[k]);
   const fiscalEnd=period=>period.length===4?period+'-12-31':period.endsWith('H1')?period.slice(0,4)+'-06-30':period.endsWith('M9')?period.slice(0,4)+'-09-30':period.slice(0,4)+['-03-31','-06-30','-09-30','-12-31'][Number(period.at(-1))-1];
-  const history=key?reports.filter(x=>x.period.length===r.period.length&&x.standard===r.standard&&x.metrics[key]?.unit===r.metrics[key].unit&&x.period<=r.period).sort((a,b)=>a.period.localeCompare(b.period)).map(x=>[fiscalEnd(x.period),x.metrics[key].value]):[];
+  const history=key?reports.filter(x=>x.period.slice(4)===r.period.slice(4)&&x.standard===r.standard&&x.metrics[key]?.unit===r.metrics[key].unit&&x.period<=r.period).sort((a,b)=>a.period.localeCompare(b.period)).map(x=>[fiscalEnd(x.period),x.metrics[key].value]):[];
   const options=reports.map(x=>'<option value="'+esc(x.period+'|'+x.standard)+'" '+(x.period===r.period&&x.standard===r.standard?'selected':'')+'>'+esc(x.period)+' · '+esc(x.standard)+'</option>').join('');
-  return '<section class="panel" id="fundamentals"><div class="section-head"><h3>Финансовое состояние эмитента</h3><span class="badge">'+esc(r.standard)+' · '+esc(r.period)+'</span></div><label class="minor">Отчётный период <select id="statementPeriod">'+options+'</select></label><p class="sub">Опубликован '+dt(r.published)+(r.publication_url?' · '+link(r.publication_url,'Дата раскрытия'):'')+'</p><div class="metrics">'+metrics.map(m=>'<div><small>'+esc(m.name)+'</small><strong>'+fmt(m.value)+' '+esc(m.unit)+'</strong></div>').join('')+'</div><h4>Факторы финансового риска</h4>'+
+  return '<section class="panel" id="fundamentals"><div class="section-head"><h3>Финансовое состояние эмитента</h3><span class="badge">'+esc(r.standard)+' · '+esc(r.period)+'</span></div><label class="minor">Отчётный период <select id="statementPeriod">'+options+'</select></label><p class="sub">'+(r.observed_only?'Доступность файла проверена ':'Опубликован ')+dt(r.published)+(r.publication_url?' · '+link(r.publication_url,'Дата раскрытия'):'')+'</p><div class="metrics">'+metrics.map(m=>'<div><small>'+esc(m.name)+'</small><strong>'+fmt(m.value)+' '+esc(m.unit)+'</strong></div>').join('')+'</div><h4>Факторы финансового риска</h4>'+
     (r.flags.length?'<ul>'+r.flags.map(f=>'<li>'+esc(f.text)+' <strong>'+fmt(r.metrics[f.key].value)+' '+esc(r.metrics[f.key].unit)+'</strong></li>').join('')+'</ul>':'<p class="sub">По доступным показателям заданные условия предупреждения не выполнены.</p>')+
     (history.length>1?'<h4>'+esc(r.metrics[key].name)+' · '+esc(r.metrics[key].unit)+'</h4>'+seriesPlot(history,r.metrics[key].name,r.metrics[key].unit):'')+
     '<details><summary>Показатели отчётности и коэффициенты ('+rows.length+')</summary><div class="tablewrap"><table><tbody>'+rows.map(([,m])=>'<tr><td>'+esc(m.name)+'</td><td>'+fmt(m.value,3)+' '+esc(m.unit)+'</td></tr>').join('')+'</tbody></table></div></details><div class="sourcebar">'+link(r.url,r.provider+' · финансовые показатели')+(r.original&&r.original!==r.url?link(r.original,'Отчёт эмитента'):'')+'</div></section>';
 }
 
-document.addEventListener('change',event=>{if(event.target.id==='statementPeriod'&&data)$('fundamentals').outerHTML=financialPanel(data.financials,event.target.value);});
+document.addEventListener('change',event=>{if(event.target.id==='statementPeriod')$('fundamentals').outerHTML=financialPanel(data?.financials||partialReports,event.target.value);});

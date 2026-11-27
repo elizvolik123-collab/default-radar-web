@@ -45,12 +45,12 @@ def run():
             for name in members:
                 if Path(name).is_absolute() or ".." in Path(name).parts:raise ValueError("Unexpected archive path")
                 source.extract(name,work)
-        for name in ("collect_market.py","collect_payments.py","market_disclosures.py","disclosure_feed.py","statement_reader.py","sync.py","export_feed.py"):
+        for name in ("collect_market.py","collect_fns_totals.py","collect_bank_reports.py","collect_payments.py","market_disclosures.py","disclosure_feed.py","statement_reader.py","sync.py","export_feed.py"):
             shutil.copy2(tools/name,work/name)
         shutil.copy2(tools/"moex-root.pem",work/"data/moex-root.pem")
         # Code-only releases must preserve observations acquired between deployments.
         tables={
-            "market":("terms","series","index_candles","reports","report_editions","headlines","daily","sessions","session_downloads","curve","corporate_yields","filings","filing_numbers","issue_type","bond_yields","issuer_sector","disclosure_cursor"),
+            "market":("fns_releases","fns_totals","cbr_identity","terms","series","index_candles","reports","report_editions","headlines","daily","sessions","session_downloads","curve","corporate_yields","filings","filing_numbers","issue_type","bond_yields","issuer_sector","disclosure_cursor"),
             "radar":("issuers","bonds","boards","plans","moex_defaults","registry_checks"),
             "payment_history":("evidence","announced","payment_journal","journal_days","prices","instruments"),
         }
@@ -75,6 +75,9 @@ def run():
                 if job.returncode==2:print("::warning::АК&М: часть публикаций недоступна. Полнота новых подтверждений не установлена.")
                 elif job.returncode:job.check_returncode()
             subprocess.run([sys.executable,"collect_payments.py","plans"],cwd=work,check=True)
+            for collector in ["collect_fns_totals.py","collect_bank_reports.py"]:
+                result=subprocess.run([sys.executable,"-u",collector],cwd=work)
+                if result.returncode:print("::warning::Часть финансовой отчётности не обновлена:",collector)
             sections=["fundamentals","quarters","disclosures","curve","yields","rate","terms","news","indices","history","spreads"]
             if datetime.now(timezone.utc).weekday()==0:sections+=["types","sectors"]
             outcome=subprocess.run([sys.executable,"-u","collect_market.py",*sections],cwd=work)

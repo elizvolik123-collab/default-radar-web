@@ -39,9 +39,9 @@ function tabs(){
   $('asof').value=state.date;
   if(chat)stopBondFeed();else if(data?.request===seq)startBondFeed(data);
 }
-let unavailableCard='';
+let unavailableCard='', partialReports=[];
 async function load(push=false){
-  unavailableCard='';
+  unavailableCard='';partialReports=[];
   const token=++seq;stopBondFeed();stopTapeFeed();save(push);tabs();notice(''); if($('screen').open)refreshScreen();
   $('marketHome').innerHTML='';
   if(!state.id){
@@ -62,6 +62,22 @@ async function load(push=false){
       $('detail').innerHTML=unavailableCard;
       $('chatContext').innerHTML=unavailableCard;
       notice(message+' Выберите другую дату.');
+      if(issue.inn){
+        try{
+          const query=params();query.set('issuer',issue.inn);
+          const facts=await api('/api/fundamentals?'+query);
+          if(token!==seq)return;
+          partialReports=facts.reports;
+          const filings=facts.filings.filter(f=>!f.isin||f.isin===issue.isin);
+          const reason=issue.inn==='7710168360'?'Для выпусков Минфина России корпоративная отчётность неприменима.':
+            facts.fns?'Из финансовых данных подтверждены годовые суммы ФНС. Баланс и денежный поток в базе пока отсутствуют.':
+            filings.length?'Есть публикации эмитента. Проверенные числовые показатели отчётности пока отсутствуют.':
+            'На эту дату в базе нет проверенных финансовых показателей этого эмитента.';
+          const reports=partialReports.length?financialPanel(partialReports):'<section class="panel" id="fundamentals"><h3>Финансовое состояние эмитента</h3><p>'+reason+'</p></section>';
+          const docs=filings.length?'<section class="panel"><details><summary>Раскрытия эмитента ('+filings.length+')</summary>'+filings.map(f=>'<p>'+dt(f.published)+' · '+link(f.url,f.title)+'</p>').join('')+'</details></section>':'';
+          $('detail').insertAdjacentHTML('beforeend',reports+fnsPanel(facts.fns)+docs);
+        }catch{if(token!==seq)return;$('detail').insertAdjacentHTML('beforeend','<p>Не удалось загрузить сведения об отчётности.</p>');}
+      }
     }else{
       $('detail').innerHTML='<p class="empty">Не удалось загрузить карточку выпуска.</p>';
       $('chatContext').textContent='Не удалось загрузить данные выпуска';
@@ -88,7 +104,7 @@ function paymentBrief(item){
   const factor=Object.entries(expert?.blocks||{}).filter(([,v])=>v?.reason&&v.url).sort(([a,x],[b,y])=>(item.weights[b]||0)*y.points-(item.weights[a]||0)*x.points)[0]?.[1];
   const disagree=signal && expert?.eligible && expert.score!=null &&
     ((f.alert&&expert.level==='Низкий')||(!f.alert&&['Высокий','Повышенный'].includes(expert.level)));
-  const docs=q?.previous==='first'?link('https://iss.moex.com/iss/statistics/engines/stock/markets/bonds/bondization/'+encodeURIComponent(item.bond.secid)+'.json','График Мосбиржи'):(q?.documents||[]).map((url,i)=>link(url,'Документ '+(i+1))).join(' · ');
+  const docs=q?.previous==='first'&&!q.documents?.length?link('https://iss.moex.com/iss/statistics/engines/stock/markets/bonds/bondization/'+encodeURIComponent(item.bond.secid)+'.json','График Мосбиржи'):(q?.documents||[]).map((url,i)=>link(url,'Документ '+(i+1))).join(' · ');
   return '<section class="payment-brief"><h3>'+(next?esc(next.kind)+' · '+dt(next.date):'Дата следующего платежа неизвестна')+'</h3>'+
     '<p><b>Прогноз платежа.</b> '+(signal?(f.alert?'Модель предупреждает о риске просрочки.':'Порог предупреждения не достигнут.')+' Цена закрытия '+fmt(f.close)+'% номинала, изменение с '+dt(f.start)+' — '+fmt(f.change)+' п. п. '+link(f.url,'Торги')+impact:esc(f?.reason||'Прогноз недоступен.'))+'</p>'+
     '<p><b>Состояние эмитента и выпуска.</b> '+(expert?.eligible&&expert.score!=null?esc(expert.level)+' риск по экспертному индексу · '+fmt(expert.score)+' из 100. '+(factor?esc(factor.reason)+' '+link(factor.url,'Основание'):''):'Экспертная оценка недоступна.')+'</p>'+
@@ -230,7 +246,7 @@ function news(){
 function render(){
   if(!data)return;
   const list='<section class="panel"><div class="section-head"><h3>Другие выпуски эмитента</h3><button class="textbtn" data-action="search">Весь каталог →</button></div><div class="tablewrap"><table><thead><tr><th>Выпуск</th><th>ISIN</th><th>Последняя сохранённая сделка</th></tr></thead><tbody>'+data.shortlist.map(b=>'<tr><td><button data-bond="'+esc(b.id)+'">'+esc(b.name)+'</button></td><td class="mono">'+esc(b.isin)+'</td><td>'+dt(b.last_trade)+'</td></tr>').join('')+'</tbody></table></div></section>';
-  $('detail').innerHTML='<button class="textbtn" data-action="home">← Обзор рынка</button>'+overview()+price()+'</div>'+radarPanel(data.radar)+paymentBrief(data)+bondHighlights(data)+forecastPanel(data.forecast)+expertPanel(data)+couponPanel(data)+financialPanel(data.financials||[])+calendar()+paymentJournal(data)+defaultEvidence(data)+filingPanel(data)+timeline()+'<div class="charts-more">'+payment()+documents()+'</div>'+outcomeList()+riskPanel()+news()+extraAnalytics(data)+(data.shortlist.length?list:'');
+  $('detail').innerHTML='<button class="textbtn" data-action="home">← Обзор рынка</button>'+overview()+price()+'</div>'+radarPanel(data.radar)+paymentBrief(data)+bondHighlights(data)+forecastPanel(data.forecast)+expertPanel(data)+couponPanel(data)+(data.quality?.federal?'<section id="fundamentals" class="panel"><h3>Государственный выпуск</h3><p>Для ОФЗ корпоративная отчётность неприменима.</p></section>':financialPanel(data.financials||[]))+fnsPanel(data.fns)+calendar()+paymentJournal(data)+defaultEvidence(data)+filingPanel(data)+timeline()+'<div class="charts-more">'+payment()+documents()+'</div>'+outcomeList()+riskPanel()+news()+extraAnalytics(data)+(data.shortlist.length?list:'');
   renderBondQuote(data);renderChat();
 
 }
@@ -303,7 +319,7 @@ async function searchList(){
   $('count').textContent='Поиск в каталоге…';
   try{const r=await api('/api/search?'+p);if(token!==searchSeq)return;
     $('count').textContent=(r.issuer_summary?r.issuer_summary+' · ':'')+'Найдено выпусков: '+fmt(r.total)+' · на '+dt(state.date);
-    $('results').innerHTML=r.items.length?'<div class="tablewrap"><table><thead><tr><th>Выпуск</th><th>ISIN / SECID</th><th>Валюта</th><th>Обращение</th><th>Платёжное событие</th></tr></thead><tbody>'+r.items.map(b=>'<tr><td><button data-bond="'+esc(b.id)+'">'+esc(b.name||b.short)+'</button></td><td class="mono">'+esc(b.isin||b.secid)+'</td><td>'+esc(b.currency||'—')+'</td><td>'+esc(b.status)+'</td><td>'+ (b.event?'Подтверждено':'Нет документа')+'</td></tr>').join('')+'</tbody></table></div>':'<p class="empty">Совпадений на эту дату нет. Попробуйте ISIN, короткое название или другой срез.</p>';
+    $('results').innerHTML=r.items.length?'<div class="tablewrap"><table><thead><tr><th>Выпуск</th><th>ISIN / SECID</th><th>Валюта</th><th>Обращение</th><th>Платёжное событие</th></tr></thead><tbody>'+r.items.map(b=>'<tr><td><button data-bond="'+esc(b.id)+'">'+esc(b.name||b.short)+'</button>'+(b.partial?'<small>Частичное покрытие</small>':'')+'</td><td class="mono">'+esc(b.isin||b.secid)+'</td><td>'+esc(b.currency||'—')+'</td><td>'+esc(b.status)+'</td><td>'+ (b.event?'Подтверждено':'Нет документа')+'</td></tr>').join('')+'</tbody></table></div>':'<p class="empty">Совпадений на эту дату нет. Попробуйте ISIN, короткое название или другой срез.</p>';
     $('pager').innerHTML=(offset||r.total>20)?'<button class="lightbtn" data-offset="'+Math.max(0,offset-20)+'" '+(!offset?'disabled':'')+'>Назад</button><small>'+fmt(offset+1)+'–'+fmt(Math.min(offset+20,r.total))+'</small><button class="lightbtn" data-offset="'+(offset+20)+'" '+(offset+20>=r.total?'disabled':'')+'>Далее</button>':'';
   }catch(e){if(token===searchSeq)$('count').textContent=e.message;}
 }
@@ -330,7 +346,7 @@ document.addEventListener('click',async event=>{
      if(!$('modal').open||$('modalTitle').textContent!==heading)return;
      $('modalBody').innerHTML='<p>ИНН '+esc(result.issuer)+' · На дату анализа в каталоге нет выпуска этого эмитента с полным покрытием.</p>'+
        result.reports.map(r=>'<details open><summary>'+esc(r.standard)+' · '+esc(r.period)+'</summary><p>'+dt(r.published)+' · '+link(r.original||r.url,'Отчёт эмитента')+'</p><dl>'+Object.values(r.metrics).map(v=>'<div><dt>'+esc(v.name)+'</dt><dd>'+fmt(v.value)+' '+esc(v.unit)+'</dd></div>').join('')+'</dl></details>').join('')+
-       result.filings.map(f=>'<p>'+dt(f.published)+' · '+link(f.url,f.title)+'</p>').join('');
+       fnsPanel(result.fns)+result.filings.map(f=>'<p>'+dt(f.published)+' · '+link(f.url,f.title)+'</p>').join('');
    }catch(e){if($('modalTitle').textContent===heading)$('modalBody').textContent=e.message;}
    return;
  }

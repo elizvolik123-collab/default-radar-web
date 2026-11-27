@@ -16,6 +16,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+      - name: Install CBR archive reader
+        if: github.event_name != 'push'
+        run: sudo apt-get update -qq && sudo apt-get install -y libarchive-tools
       - name: Prepare site and data
         env:
           EVENT: ${{ github.event_name }}

@@ -93,8 +93,14 @@ def collect(planned=False,recent=False):
                     if error:errors.append(error)
                     else:
                         db.execute("DELETE FROM downloads WHERE url=?",(url,))
-                        db.executemany("INSERT OR IGNORE INTO announced VALUES(?,?,?,?)" if planned else
-                                       "INSERT OR IGNORE INTO evidence VALUES(?,?,?,?,?,?,?,?,?)",rows)
+                        if planned:
+                            db.executemany("INSERT OR IGNORE INTO announced VALUES(?,?,?,?)",rows)
+                        else:
+                            # A reviewed holiday payment can be keyed to the coupon period end.
+                            # The same issuer notice and kind must not create another obligation.
+                            db.executemany("""INSERT OR IGNORE INTO evidence SELECT ?,?,?,?,?,?,?,?,?
+                                WHERE NOT EXISTS (SELECT 1 FROM evidence WHERE bond=? AND kind=? AND url=?)""",
+                                [(*row,row[0],row[2],row[6]) for row in rows])
         with db:db.executemany("INSERT OR REPLACE INTO downloads VALUES(?,?)",errors)
         query="SELECT count(*) FROM announced WHERE url LIKE '%disclosure.ru/%'" if planned else "SELECT count(*) FROM evidence WHERE source LIKE '%АК&М'"
         print("АК&М: принятые записи",db.execute(query).fetchone()[0],"ошибок",len(errors),flush=True)
