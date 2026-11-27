@@ -28,3 +28,10 @@
 .payment-brief{margin-block:1rem;padding:1rem;border:1px solid var(--line);border-radius:14px}
 .payment-brief h3,.payment-brief p{margin:0 0 .65rem}
 .payment-brief p:last-child{margin-bottom:0}
+.cohort-mobile-results{display:none}
+@media(max-width:640px){
+  #cohortStudy p,#cohortStudy dd{text-align:start}
+  .cohort-mobile-results{display:grid;gap:.2rem;margin:.7rem 0 1.1rem}
+  .cohort-mobile-results dt{font-weight:700}
+  .cohort-mobile-results dd{margin:0 0 .55rem;font-variant-numeric:tabular-nums}
+}
