@@ -41,6 +41,7 @@ function tabs(){
 }
 let unavailableCard='', partialReports=[];
 async function load(push=false){
+  if($('attentionEvents')?.closest('dialog[open]'))quitModal();
   unavailableCard='';partialReports=[];
   const token=++seq;stopBondFeed();stopTapeFeed();save(push);tabs();notice(''); if($('screen').open)refreshScreen();
   $('marketHome').innerHTML='';
@@ -87,13 +88,39 @@ async function load(push=false){
     $('dialogue').innerHTML='';
   }
 }
+const attentionLabels={overdue:'Открытые просрочки',raised:'Новые предупреждения',paid:'Подтверждения выплат',entered:'До выплаты 7 дней'};
 function attentionList(items){
-  const labels={overdue:'Опубликовано сообщение об открытой просрочке',raised:'Появилось предупреждение модели',paid:'Опубликовано подтверждение выплаты',entered:'Выпуск вошёл в семидневное окно'};
-  function row(item){
-    return '<div class="docrow"><div><button data-bond="'+esc(item.id)+'">'+esc(item.name)+'</button><small>'+labels[item.group]+' · '+esc(item.kind)+' · срок '+dt(item.due)+'</small></div>'+link(item.url,item.group==='entered'?'График':item.group==='raised'?'Торги':'Документ')+'</div>';
+  const counts=new Map();
+  for(const item of items)counts.set(item.group,(counts.get(item.group)||0)+1);
+  const summary=[...counts].map(([group,count])=>'<li><span>'+esc(attentionLabels[group]||'Другие события')+'</span> <b>'+fmt(count)+'</b></li>').join('');
+  return '<section class="panel attention-panel" id="marketAttention" aria-labelledby="attentionTitle"><div><h2 id="attentionTitle">Что требует внимания</h2><span class="sub">События за <time datetime="'+esc(state.date)+'">'+dt(state.date)+'</time></span></div>'+
+    (items.length?'<ul aria-label="События по типам">'+summary+'</ul><button id="showAttention" class="lightbtn" type="button" aria-haspopup="dialog">Все события ('+fmt(items.length)+')</button>':
+      '<p class="sub">Новых событий за эту дату нет.</p>')+'</section>';
+}
+function openAttention(items,day){
+  const pageSize=5;
+  const groups=[...new Set(items.map(item=>item.group))];
+  modal('События за '+dt(day),'<div id="attentionEvents"><label'+(groups.length<2?' hidden':'')+'>Тип события <select id="attentionFilter"><option value="">Все типы</option>'+
+    groups.map(group=>'<option value="'+esc(group)+'">'+esc(attentionLabels[group]||'Другие события')+'</option>').join('')+'</select></label>'+
+    '<div id="attentionRows"></div><div class="attention-nav"><span id="attentionRange" role="status"></span>'+
+    '<div><button class="lightbtn" type="button" id="attentionPrev">Назад</button><button class="lightbtn" type="button" id="attentionNext">Далее</button></div></div></div>');
+  let start=0;
+  function renderPage(){
+    const group=$('attentionFilter').value;
+    const rows=group?items.filter(item=>item.group===group):items;
+    const end=Math.min(rows.length,start+pageSize);
+    $('attentionRows').innerHTML=rows.slice(start,end).map(item=>'<div class="docrow"><div><button data-bond="'+esc(item.id)+'">'+esc(item.name)+'</button><small>'+
+      esc(attentionLabels[item.group]||'Событие')+' · '+esc(item.kind)+' · срок '+dt(item.due)+'</small></div>'+
+      link(item.url,item.group==='entered'?'График':item.group==='raised'?'Торги':'Документ')+'</div>').join('');
+    $('attentionRange').textContent=(rows.length>pageSize?fmt(start+1)+'–'+fmt(end)+' из ':'Всего событий — ')+fmt(rows.length);
+    $('attentionPrev').parentElement.hidden=rows.length<=pageSize;
+    $('attentionPrev').disabled=start===0;
+    $('attentionNext').disabled=end===rows.length;
   }
-  return '<section class="panel"><h2>Что требует внимания</h2><p class="sub">Изменения за '+dt(state.date)+'</p>'+
-    (items.length?items.slice(0,4).map(row).join('')+(items.length>4?'<details><summary>Ещё событий: '+fmt(items.length-4)+'</summary>'+items.slice(4).map(row).join('')+'</details>':''):'<p>В доступном срезе новых событий за эту дату нет.</p>')+'</section>';
+  $('attentionFilter').onchange=()=>{start=0;renderPage();};
+  $('attentionPrev').onclick=()=>{start-=pageSize;renderPage();};
+  $('attentionNext').onclick=()=>{start+=pageSize;renderPage();};
+  renderPage();
 }
 function paymentBrief(item){
   const f=item.forecast, next=item.next, expert=item.expert, q=item.quality;
@@ -154,8 +181,9 @@ function marketHome(m){
   const auditLink=coverage.asof.slice(0,10)==='2026-11-26' ? '<p><a href="research/coverage_781_2026-11-26.csv" download>Скачать проверку 781 выпуска по ISIN · CSV</a></p>' : '';
   const summary='<section class="panel"><h2>Покрытие анализа на '+dt(coverage.asof)+'</h2><p><strong>'+fmt(coverage.full)+' из '+fmt(coverage.scored)+'</strong> выпусков с прогнозом доступны для полного разбора. До '+dt(dtadd(state.date,7))+' включительно предстоят платежи по '+fmt(coverage.total-coverage.outside_window)+' выпускам. Модель рассчитала прогноз для '+fmt(coverage.scored)+' из них. Всего в каталоге '+fmt(coverage.total)+'.</p></section>'+attentionList(m.attention||[])+'<section class="panel">'+breakdown+auditLink+'<details><summary>Как считаем полный разбор</summary><p>Считаем уникальные выпуски с рыночной ценой, прогнозом на ближайшие семь дней, НКД и суммой ближайшего купона, подтверждённой датой исполнения предыдущего известного платежа и двумя сопоставимыми отчётными периодами. Последний период закончился не более 370 дней назад.</p>'+coverage.ids.map(id=>'<button data-bond="'+esc(id)+'">'+esc(id)+'</button>').join('')+'</details>'+
     (first?'<h3>Предупреждение о первой просрочке</h3><p>За семь дней до срока модель выявила <strong>'+fmt(first.tp)+' из '+fmt(first.late)+'</strong> просроченных купонов и пропустила <strong>'+fmt(first.fn)+'</strong>. Из '+fmt(first.tp+first.fp)+' предупреждений подтвердились '+fmt(first.tp)+(first.tp+first.fp?' ('+fmt(100*first.tp/(first.tp+first.fp),1)+'%)':'')+', ложных — '+fmt(first.fp)+'. В выборке '+fmt(first.n)+' платежей. Проверка за '+dt(research.test.first)+' — '+dt(research.test.last)+'. Учитываются купоны на первую известную дату просрочки каждого эмитента.</p>':'')+'</section>';
-  $('marketHome').innerHTML=summary+marketDashboard(m)+'<section id="paymentCalendar" class="panel"><h2>Календарь облигационных выплат</h2><div class="calendar-body"></div></section>'+
-    (research?'<details id="marketWatch" class="panel"><summary>Сигналы риска по выплатам на семь дней</summary><div aria-live="polite"></div></details>':'')+cohortResults(research?.cohorts,research?.schedule_review)+newsFeed(m)+methodology;
+  $('marketHome').innerHTML=cohortResults(research?.cohorts,research?.schedule_review)+summary+marketDashboard(m)+'<section id="paymentCalendar" class="panel"><h2>Календарь облигационных выплат</h2><div class="calendar-body"></div></section>'+
+    (research?'<details id="marketWatch" class="panel"><summary>Сигналы риска по выплатам на семь дней</summary><div aria-live="polite"></div></details>':'')+newsFeed(m)+methodology;
+  if($('showAttention'))$('showAttention').onclick=()=>openAttention(m.attention,state.date);
   initPaymentCalendar($('paymentCalendar').querySelector('.calendar-body'));
   const watch=$('marketWatch');
   if(watch)watch.ontoggle=async()=>{

@@ -29,6 +29,25 @@
 .payment-brief h3,.payment-brief p{margin:0 0 .65rem}
 .payment-brief p:last-child{margin-bottom:0}
 .cohort-mobile-results{display:none}
+.attention-panel{display:flex;align-items:center;flex-wrap:wrap;gap:.6rem 1.5rem}
+.attention-panel h2,.attention-panel .sub{margin:0}
+.attention-panel ul{flex:1 1 15rem;display:flex;align-items:baseline;flex-wrap:wrap;gap:.35rem 1.1rem;margin:0;padding:0;list-style:none}
+.attention-panel li{margin:0;font-size:.88rem;color:var(--muted)}
+.attention-panel li b{color:var(--ink);font-variant-numeric:tabular-nums}
+.attention-panel button,.attention-nav button{min-height:44px}
+#attentionEvents label{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;color:var(--muted)}
+#attentionFilter{max-width:100%;min-height:44px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:.4rem}
+#attentionRows .docrow button{padding:.35rem 0;text-align:start;color:var(--teal);font-weight:600;overflow-wrap:anywhere}
+#attentionRows .docrow>a{flex:none}
+.attention-nav,.attention-nav>div{display:flex;align-items:center;gap:.5rem}
+.attention-nav{justify-content:space-between;flex-wrap:wrap;margin-top:.75rem}
+.attention-nav span{color:var(--muted);font-variant-numeric:tabular-nums}
+@media(max-width:640px){
+  .attention-panel{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.4rem .6rem}
+  .attention-panel ul{grid-column:1/-1}
+  .attention-panel button{grid-row:1;grid-column:2;font-size:.82rem;padding:.4rem .55rem}
+  .attention-panel>.sub{grid-column:1/-1}
+}
 @media(max-width:640px){
   #cohortStudy p,#cohortStudy dd{text-align:start}
   .cohort-mobile-results{display:grid;gap:.2rem;margin:.7rem 0 1.1rem}
