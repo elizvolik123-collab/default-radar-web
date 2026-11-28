@@ -11,8 +11,8 @@ html:root,html:root[data-theme=dark],html:root[data-theme=light]{
   --frost-ease:cubic-bezier(.2,.7,.2,1);
   --ink:#fff;--muted:rgb(255 255 255 / .7);--line:rgb(255 255 255 / .2);--grid:rgb(255 255 255 / .12);
   --paper:transparent;--surface:var(--frost-face);--surface-alt:var(--frost-soft);
-  --teal:#7ee2c0;--mint:#7ee2c0;--accent-ink:#fff;--dark:var(--frost-strong);
-  --amber:#fcd77f;--rose:#fdb0a8;
+  --teal:#facc15;--mint:#facc15;--accent-ink:#fff;--dark:var(--frost-strong);
+  --amber:#fcd34d;--rose:#fb923c;
   --analytics-face:var(--frost-face);--analytics-edge:var(--frost-edge);--analytics-glint:rgb(255 255 255 / .08);
   --metric-surface:var(--frost-soft);--glass-tone:var(--frost-face);--glass-tint:var(--frost-face);--glint:rgb(255 255 255 / .06);
   --shell:transparent;--shell-rail:var(--frost-soft);--shell-active:var(--frost-strong);--shell-accent:transparent;--shell-border:var(--frost-edge);--shell-ink:#fff;
