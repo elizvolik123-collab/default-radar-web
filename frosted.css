@@ -1,7 +1,12 @@
 /* Frosted Glass theme: palette, glass surfaces and motion adapted from the CRM dashboard reference. Loaded last. */
+@font-face{
+  font-family:Figtree;font-style:normal;font-weight:400 700;font-display:swap;
+  src:url(figtree-latin.woff2) format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
 html:root,html:root[data-theme=dark],html:root[data-theme=light]{
   color-scheme:dark;
-  --frost-veil:rgb(0 0 0 / .3);
+  --frost-veil:rgb(12 15 20 / .55);
  --frost-face:rgb(255 255 255 / .14);
  --frost-soft:rgb(255 255 255 / .08);
  --frost-strong:rgb(255 255 255 / .24);
@@ -19,7 +24,7 @@ html:root,html:root[data-theme=dark],html:root[data-theme=light]{
   font-family:"Figtree",Inter,system-ui,sans-serif;
   background:#3a3f47;
 }
-html:root[data-theme=dark]{--frost-veil:rgb(0 0 0 / .55);--frost-face:rgb(255 255 255 / .08);--frost-soft:rgb(255 255 255 / .04)}
+html:root[data-theme=dark]{--frost-veil:rgb(8 10 14 / .7);--frost-face:rgb(255 255 255 / .08);--frost-soft:rgb(255 255 255 / .04)}
 
 html body,html body:has(#market:not(.hide)){background:none!important;color:var(--ink);font-family:inherit}
 body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
@@ -160,10 +165,34 @@ summary:hover{color:rgb(255 255 255 / .8)}
 
 /* Phone: filters wrap onto several rows, wide tables scroll inside their block */
 @media (max-width:760px){
-  html body .top{top:8px;margin:8px 8px 0;border-radius:20px}
+  html[data-theme] body .top{position:relative;top:auto;height:auto;margin:8px 8px 0;border-radius:20px}
+  html[data-theme] body .top .wrap.nav{display:grid;height:auto;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto}
+  html body .top .brand{grid-area:1/1}
+  html body .top #themeToggle{grid-area:1/2}
   html body :is(.panel,#market .panel,.case,.chat-intro,#macroPanel,.bond-summary){border-radius:20px}
   html body :is(.seg,.timeline,.chips,.screen-tools,.exchange-toolbar,.filters,.row-links,.section-head){flex-wrap:wrap;white-space:normal;row-gap:6px}
   html body .seg{display:flex;width:fit-content;max-width:100%}
   html body .tablewrap{max-width:100%}
   html body .tablewrap table{min-width:560px}
 }
+
+#cohortStudy .cohort-value{
+  min-width:2.1rem;min-height:2rem;padding:.2rem .5rem;
+  border:1px solid var(--frost-edge-strong);border-radius:.6rem;
+  background:rgb(20 25 31 / .52);color:#fff4d6;
+  font:inherit;font-weight:700;font-variant-numeric:tabular-nums;cursor:pointer;
+}
+#cohortStudy .cohort-value:hover{background:rgb(20 25 31 / .8);text-decoration:underline}
+#cohortEvidence{overflow-wrap:anywhere}
+#cohortEvidence label{display:grid;gap:.3rem;font-weight:600}
+#cohortEvidence input{width:100%;min-height:44px;padding:.5rem .7rem;border-radius:.6rem;background:#32383d;border:1px solid var(--frost-edge-strong)}
+#cohortEvidence [role=status],#cohortEvidence .mono{font-variant-numeric:tabular-nums}
+#cohortEvidence .cohort-records{margin:0;padding:0;list-style:none}
+#cohortEvidence li{margin:0;padding:.75rem 0;border-top:1px solid var(--frost-edge)}
+#cohortEvidence li p{margin:.3rem 0}
+#cohortEvidence li .mono{display:block;font-size:.85rem}
+#cohortEvidence li a{color:#fff1c8;text-decoration:underline;text-underline-offset:.18em}
+#cohortEvidence .cohort-pager:not([hidden]){display:flex;justify-content:flex-end;gap:.6rem}
+#cohortEvidence .cohort-pager button{min-height:44px}
+#cohortEvidence button:disabled{opacity:.5}
+@media(max-width:640px){#cohortStudy .cohort-value{min-width:44px;min-height:44px}}

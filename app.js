@@ -41,7 +41,7 @@ function tabs(){
 }
 let unavailableCard='', partialReports=[];
 async function load(push=false){
-  if($('attentionEvents')?.closest('dialog[open]'))quitModal();
+  if($('modal').open && $('modalBody').querySelector('#attentionEvents, #cohortEvidence'))quitModal();
   unavailableCard='';partialReports=[];
   const token=++seq;stopBondFeed();stopTapeFeed();save(push);tabs();notice(''); if($('screen').open)refreshScreen();
   $('marketHome').innerHTML='';
@@ -138,25 +138,96 @@ function paymentBrief(item){
     (disagree?'<p>Оценки расходятся. Прогноз ближайшей выплаты использует цену и её изменение. Экспертный индекс учитывает также раскрытия и факторы состояния эмитента.</p>':'')+
     '<p><b>Полнота данных.</b> '+(q?states[q.previous]+' '+docs+' '+(q.federal?'Корпоративная отчётность к ОФЗ неприменима.':q.fresh?'Есть свежие сопоставимые показатели отчётности.':'Не хватает свежих сопоставимых показателей отчётности.')+(q.terms?'':' Параметры ближайшего купона неполны.'):'Для этого выпуска полнота данных на выбранную дату не оценена.')+'</p></section>';
 }
+function cohortVerdict(group,flag){
+  if(group==='В срок')return flag?'Ложные тревоги':'Выплаты в срок без сигнала';
+  return flag?'Выявлено':'Пропущено';
+}
+function cohortDocument(label,url,observed){
+  return '<div>'+esc(label)+' · '+(url?link(url,'Документ'):'Ссылка отсутствует')+
+    (observed?' <small>в архиве '+dt(observed)+'</small>':'')+'</div>';
+}
+function cohortRecord(row,groupBy){
+  let docs=cohortDocument('Исход платежа',row.outcome_url,row.outcome_published);
+  if(row.event_status_url && row.event_status_url!==row.outcome_url)
+    docs+=cohortDocument('Категория платежа',row.event_status_url,row.event_status_published);
+  if(groupBy==='group' && row.status_url && ![row.event_status_url,row.outcome_url].includes(row.status_url))
+    docs+=cohortDocument('Статус выпуска',row.status_url,row.status_published);
+  return '<li><strong>'+esc(row.name)+'</strong> <span class="mono">'+esc(row.isin)+'</span>'+
+    '<p>'+esc(row.kind)+' · срок <b>'+dt(row.due)+'</b> · прогноз на '+dt(row.anchor)+'</p>'+
+    '<p>Исход платежа · '+esc(row.event_group||'Категория не подтверждена')+
+    (groupBy==='group'?' · Статус выпуска · '+esc(row.group):'')+'</p>'+docs+'</li>';
+}
+async function openCohortEvidence(button){
+  const {study,asof,group,groupBy,field,flag,count}=button.dataset;
+  const title=cohortVerdict(group,Number(flag))+' · '+group;
+  if(!$('modal').open)button.focus({preventScroll:true});
+  modal(title,'<div id="cohortEvidence"><p role="status">Загружаем выпуски…</p></div>');
+  const body=$('cohortEvidence');
+  body.onkeydown=event=>{
+    if(event.key==='Escape'){event.preventDefault();quitModal();}
+  };
+  try{
+    const response=await fetch('research/'+study+'_evidence.json',{cache:'no-cache'});
+    if(!response.ok)throw Error('Не удалось загрузить документы выборки.');
+    const detail=await response.json();
+    if(!body.isConnected || !$('modal').open)return;
+    const matches=detail.rows.filter(row=>row[groupBy]===group && row[field]===Number(flag));
+    if(detail.asof!==asof || matches.length!==Number(count))throw Error('Таблица и список относятся к разным версиям выборки. Обновите страницу.');
+    const limit=5;
+    body.innerHTML='<p>'+(field==='price_alert'?'Проверка по котировкам':groupBy==='group'?'По статусу выпуска':'По исходу платежа')+
+      ' · срез '+dt(asof)+' · выпусков '+fmt(matches.length)+'</p>'+
+      (matches.length>limit?'<label>Найти выпуск<input type="search" placeholder="Название или ISIN"></label>':'')+
+      '<p role="status"></p><ul class="cohort-records"></ul><div class="cohort-pager"><button type="button" class="lightbtn">Назад</button><button type="button" class="lightbtn">Далее</button></div>';
+    const input=body.querySelector('input'),pager=body.querySelector('.cohort-pager');
+    const [prev,next]=pager.querySelectorAll('button');
+    let start=0;
+    function render(){
+      const query=(input?.value||'').trim().toLocaleLowerCase('ru');
+      const filtered=query?matches.filter(row=>(row.name+' '+row.isin).toLocaleLowerCase('ru').includes(query)):matches;
+      const end=Math.min(start+limit,filtered.length);
+      body.querySelector('[role=status]').textContent=filtered.length?'Показано '+(start+1)+'–'+end+' из '+filtered.length:query?'Совпадений нет.':'В этой категории нет выпусков.';
+      body.querySelector('ul').innerHTML=filtered.slice(start,end).map(row=>cohortRecord(row,groupBy)).join('');
+      pager.hidden=filtered.length<=limit;
+      prev.disabled=start===0;
+      next.disabled=end===filtered.length;
+    }
+    if(input)input.oninput=()=>{start=0;render();};
+    prev.onclick=()=>{start-=limit;render();};
+    next.onclick=()=>{start+=limit;render();};
+    render();
+  }catch(error){
+    if(!body.isConnected || !$('modal').open)return;
+    body.innerHTML='<p role="status">'+esc(error.message)+'</p><button type="button" class="lightbtn">Повторить</button>';
+    body.querySelector('button').onclick=()=>openCohortEvidence(button);
+  }
+}
 function cohortResults(current,fixed){
   const study=fixed||current;
   if(!study)return '';
-  const rows=(key,groups)=>groups.map(g=>{
+  const dataset=fixed?'schedule_review_522':'cohort_validation';
+  function value(g,key,flag,groupBy,file,asof){
+    const count=flag?g[key].signals:g[key].quiet;
+    const result=cohortVerdict(g.name,flag);
+    return '<button type="button" class="cohort-value" aria-haspopup="dialog" data-study="'+file+'" data-asof="'+esc(asof)+'" data-group="'+esc(g.name)+'" data-group-by="'+groupBy+'" data-field="'+key+'" data-flag="'+flag+'" data-count="'+count+'" aria-label="'+esc(result+' · '+g.name+' · '+fmt(count))+'">'+fmt(count)+'</button>';
+  }
+  const rows=(key,groups,groupBy,file,asof)=>groups.map(g=>{
     const m=g[key],control=g.name==='В срок';
     const known=key==='alert'?'<td>'+(g.preannounced==null?'—':fmt(g.preannounced))+'</td>':'';
-    return '<tr><th scope="row">'+esc(g.name)+'</th><td>'+fmt(g.total)+'</td><td>'+fmt(g.issuers)+'</td>'+known+'<td>'+fmt(m.scored)+'</td><td>'+fmt(g.total-m.scored)+'</td><td>'+(m.scored?fmt(m.signals)+(control?' ложн.':''):'—')+'</td><td>'+(m.scored?fmt(m.quiet):'—')+'</td></tr>';
+    return '<tr><th scope="row">'+esc(g.name)+'</th><td>'+fmt(g.total)+'</td><td>'+fmt(g.issuers)+'</td>'+known+'<td>'+fmt(m.scored)+'</td><td>'+fmt(g.total-m.scored)+'</td><td>'+(m.scored?value(g,key,1,groupBy,file,asof)+(control?' ложн.':''):'—')+'</td><td>'+(m.scored?value(g,key,0,groupBy,file,asof):'—')+'</td></tr>';
   }).join('');
-  const table=(key,groups=study.groups)=>'<div class="tablewrap" tabindex="0" aria-label="Результаты по группам выпусков"><table><thead><tr>'+
-    ['Исход','Выпуски','Эмитенты',...(key==='alert'?['График известен за 7 дней']:[]),'Оценено','Без оценки','Сигнал','Без сигнала'].map(s=>'<th scope="col">'+s+'</th>').join('')+'</tr></thead><tbody>'+rows(key,groups)+'</tbody></table></div>';
+  const table=(key,groups=study.groups,groupBy='group',file=dataset,asof=study.asof)=>'<div class="tablewrap" tabindex="0" aria-label="Результаты по группам выпусков"><table><thead><tr>'+
+    ['Исход','Выпуски','Эмитенты',...(key==='alert'?['График известен за 7 дней']:[]),'Оценено','Без оценки','Сигнал','Без сигнала'].map(s=>'<th scope="col">'+s+'</th>').join('')+'</tr></thead><tbody>'+rows(key,groups,groupBy,file,asof)+'</tbody></table></div>';
   const outcomes=study.payments||study.groups;
+  const groupBy=study.payments?'event_group':'group';
   const mobileSummary='<dl class="cohort-mobile-results">'+outcomes.map(g=>{
     const m=g.alert;
-    const verdict=g.name==='В срок'?'Ложных тревог — '+fmt(m.signals):'Выявлено — '+fmt(m.signals)+', пропущено — '+fmt(m.quiet);
+    const number=flag=>m.scored?value(g,'alert',flag,groupBy,dataset,study.asof):'—';
+    const verdict=g.name==='В срок'?'Ложные тревоги — '+number(1):'Выявлено — '+number(1)+', пропущено — '+number(0);
     return '<dt>'+esc(g.name)+'</dt><dd>'+verdict+'. Без оценки — '+fmt(g.total-m.scored)+'.</dd>';
   }).join('')+'</dl>';
   return '<section class="panel" id="cohortStudy"><h2>Как модель распознавала дефолты</h2>'+
     '<p>Проверка за семь дней до платежа. Дата оценки — с '+dt(study.cutoff)+', исходы собраны по '+dt(study.asof)+'. Каждый выпуск входит только в одну группу.</p>'+
-    '<h3>'+(study.payments?'По исходу проверяемой выплаты':'Когда срок выплаты был известен заранее')+'</h3>'+mobileSummary+table('alert',outcomes)+
+    '<h3>'+(study.payments?'По исходу проверяемой выплаты':'Когда срок выплаты был известен заранее')+'</h3><p class="sub">Нажмите на число сигналов или пропусков, чтобы увидеть выпуски и документы.</p>'+mobileSummary+table('alert',outcomes,groupBy)+
     (study.unmatched_payments?'<p>Без подтверждённой категории конкретной просрочки: '+fmt(study.unmatched_payments)+'.</p>':'')+
     '<p>У проблемных выпусков «без сигнала» означает пропуск. В группе «В срок» срабатывание означает ложную тревогу. В колонке «Без оценки» — выпуски, для которых не хватило условий для прогноза.</p>'+
     (study.payments?'<details><summary>По наиболее серьёзному статусу выпуска</summary><p>Здесь выпуск отнесён к дефолтам, если на дату исследования в реестре был хотя бы один дефолт. Первый просроченный платёж у него мог закончиться техническим дефолтом.</p>'+table('alert')+'</details>':'')+
@@ -166,7 +237,7 @@ function cohortResults(current,fixed){
     '<p>Для таблицы по платежам проверяем в реестре Мосбиржи именно этот ISIN, дату и вид обязательства. График должен быть опубликован к концу московского дня за семь календарных дней до срока. В выгрузке указаны даты и ссылки на график и на документ об исходе.</p>'+
     '<p>Веса модели и порог сохранены. Использованы торги до дня прогноза. Наличие нескольких выпусков у одного эмитента и доступность документов влияют на состав выборки. Эти доли нельзя переносить на весь рынок.</p></details>'+
     (fixed?'<p><a href="research/schedule_review_522.csv" download>Результаты по 522 выпускам · CSV</a> · <a href="research/cohort_backfill_283.csv" download>Сделки и документы по 283 перепроверенным выпускам · CSV</a></p>':'')+
-    (current?'<details><summary>Текущая выборка на '+dt(current.asof)+'</summary>'+table('alert',current.payments||current.groups)+'<p><a href="research/cohort_validation.csv" download>Скачать текущую проверку по ISIN · CSV</a></p></details>':'')+'</section>';
+    (current?'<details><summary>Текущая выборка на '+dt(current.asof)+'</summary>'+table('alert',current.payments||current.groups,current.payments?'event_group':'group','cohort_validation',current.asof)+'<p><a href="research/cohort_validation.csv" download>Скачать текущую проверку по ISIN · CSV</a></p></details>':'')+'</section>';
 }
 function marketHome(m){
   const research=m.research;
@@ -184,6 +255,10 @@ function marketHome(m){
   $('marketHome').innerHTML=cohortResults(research?.cohorts,research?.schedule_review)+summary+marketDashboard(m)+'<section id="paymentCalendar" class="panel"><h2>Календарь облигационных выплат</h2><div class="calendar-body"></div></section>'+
     (research?'<details id="marketWatch" class="panel"><summary>Сигналы риска по выплатам на семь дней</summary><div aria-live="polite"></div></details>':'')+newsFeed(m)+methodology;
   if($('showAttention'))$('showAttention').onclick=()=>openAttention(m.attention,state.date);
+  if($('cohortStudy'))$('cohortStudy').onclick=event=>{
+    const button=event.target.closest('button[data-study]');
+    if(button)openCohortEvidence(button);
+  };
   initPaymentCalendar($('paymentCalendar').querySelector('.calendar-body'));
   const watch=$('marketWatch');
   if(watch)watch.ontoggle=async()=>{

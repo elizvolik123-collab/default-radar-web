@@ -34,7 +34,7 @@ def run():
     tools=Path(__file__).resolve().parent
     stage=site/"_site"
     stage.mkdir(exist_ok=True)
-    for name in ("index.html","tactile.js","tactile.css","tactile-LICENSE.txt","trading-chart.js","trading-chart.css","lightweight-charts.js","charts-LICENSE.txt","charts-NOTICE","app.js","market.js","terminal.js","terminal.css","pages.js","worker.js","style.css","favicon.svg","agent-radar.svg","radar.svg"):
+    for name in ("index.html","frosted.js","frosted.css","frost-bg.jpg","figtree-latin.woff2","figtree-OFL.txt","tactile.js","tactile.css","tactile-LICENSE.txt","trading-chart.js","trading-chart.css","lightweight-charts.js","charts-LICENSE.txt","charts-NOTICE","app.js","market.js","terminal.js","terminal.css","pages.js","worker.js","style.css","favicon.svg","agent-radar.svg","radar.svg"):
         shutil.copy2(site/name,stage/name)
     for name in ("python","research","documents"):
         shutil.copytree(site/name,stage/name,dirs_exist_ok=True)
@@ -87,6 +87,8 @@ def run():
         shutil.copy2(tools/"cohort_validation.py",work/"cohort_validation.py")
         subprocess.run([sys.executable,"cohort_validation.py"],cwd=work,check=True)
         shutil.copy2(work/"data/cohort_validation.csv",stage/"research/cohort_validation.csv")
+        from cohort_evidence import export_evidence
+        export_evidence(work/"data", stage/"research", "cohort_validation")
         # The ingestion error queue is operational metadata, not public market data.
         with closing(sqlite3.connect(work/"data/payment_history.sqlite3")) as history:
             history.execute("DROP TABLE IF EXISTS downloads");history.commit()
