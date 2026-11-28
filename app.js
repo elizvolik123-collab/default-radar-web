@@ -401,7 +401,7 @@ function renderChat(){
   window.dispatchEvent(new Event('radar-view'));
   const msgs=chats.get(chatKey())||[];
   $('dialogue').innerHTML=msgs.length?msgs.map((m,index)=>messageHtml(m,index)).join(''):'<div class="chat-intro"><img class="agent-intro-mark" src="agent-radar.svg" alt=""><h2>Какой выпуск или показатель вас интересует?</h2><p>Назовите выпуск или компанию. Можно продолжить разбор открытой карточки.</p><div class="chips">'+['Какова динамика цены закрытия ОФЗ 26207?','Какова долговая нагрузка Газпрома?',(state.id?'Когда ближайший купон выбранного выпуска?':'Когда предусмотрена следующая купонная выплата по облигациям Сбербанка?')].map(q=>'<button data-prompt="'+esc(q)+'">'+esc(q)+'</button>').join('')+'</div></div>';
-  $('mode').textContent=engine.value==='archive'?'Поиск по опубликованным данным':'Помощник радара';
+  $('mode').textContent=engine.value==='archive'?'Поиск по опубликованным данным':'';
 
 }
 function messageHtml(m,index){

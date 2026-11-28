@@ -196,3 +196,29 @@ summary:hover{color:rgb(255 255 255 / .8)}
 #cohortEvidence .cohort-pager button{min-height:44px}
 #cohortEvidence button:disabled{opacity:.5}
 @media(max-width:640px){#cohortStudy .cohort-value{min-width:44px;min-height:44px}}
+
+/* Optical edges keep the text layer crisp. */
+html[data-theme] body .top .brand,html[data-theme] body .top .brand span,
+html[data-theme] body .top :is(nav button,.tab-item,.tab-item span),html body :is(#openGuide,#contextGuide){color:white!important;-webkit-text-fill-color:white!important;opacity:1!important;font-weight:750!important}
+html body #subtitle{font-style:italic;font-weight:700;color:white}
+html body #optical-switch{display:none!important}
+html[data-theme] body .top .wrap.nav #themeToggle{display:inline-flex!important;visibility:visible!important;opacity:1!important;position:relative;width:56px;height:32px;grid-area:1/2;background:#343740!important;border:1px solid #fff!important;align-items:center;justify-content:space-around}
+html body #themeToggle::before{content:"";position:absolute;inset:3px auto auto 3px;width:24px;height:24px;border-radius:100%;background:#fff!important;transform:none!important}
+html[data-theme=dark] body #themeToggle::before{left:calc(100% - 27px)}
+html body #agentStage:has(span:empty),html body #mode:empty{display:none!important}
+html[data-theme] body :is(#market .panel,#market #macroPanel,#market .macro-card,#chat .chat-intro,#chat .bubble,#chat #askForm,.date-wrap,.tablewrap,dialog){
+ background:linear-gradient(133deg,rgba(255,255,255,.14),transparent 15%,transparent 84%,rgba(255,255,255,.12)),rgba(25,25,31,.63)!important;
+ backdrop-filter:blur(7px) saturate(135%);-webkit-backdrop-filter:blur(7px) saturate(135%);
+ border:1px solid #ffffff60!important;box-shadow:inset 1px 1px 2px #ffffff73,inset -1px -1px 3px #ffffff32,0 5px 18px #0003}
+html[data-theme] body #market #macroPanel .macro-card,html[data-theme] body #market #macroPanel .macro-card *{color:#fff!important;-webkit-text-fill-color:#fff!important;opacity:1!important;font-weight:700}
+html[data-theme] body #market #macroPanel .macro-card strong{font-size:1.35rem;font-weight:800}
+html body #macroPanel .macro-card[aria-pressed=true]{outline:2px solid #ffdd9a;outline-offset:-2px}
+html[data-theme] body #yieldCurve svg path[stroke-width="3"]{stroke:#ffdc93!important}
+html[data-theme] body #yieldCurve svg circle{fill:#fff0cb!important;stroke:#73582c!important}
+html[data-theme] body #yieldCurve svg text{fill:#fff!important;font-weight:700}
+html[data-theme] body :is(.panel,.tablewrap,#chat,dialog) :is(.sub,.meta,small,th,.axis-caption){color:#fff!important;opacity:1;font-weight:600}
+html body :is(.axis-caption,.chart-note){font-style:italic}
+html[data-theme] body .top #themeToggle::before{display:block}
+html[data-theme] body .top #themeToggle::after{content:none}
+html[data-theme] body .top #themeToggle span{display:inline;position:relative;color:#fff;opacity:1;line-height:1}
+html[data-theme=light] body .top #themeToggle span:first-child,html[data-theme=dark] body .top #themeToggle span:last-child{color:#292930}
