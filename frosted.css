@@ -1,0 +1,169 @@
+/* Frosted Glass theme: palette, glass surfaces and motion adapted from the CRM dashboard reference. Loaded last. */
+html:root,html:root[data-theme=dark],html:root[data-theme=light]{
+  color-scheme:dark;
+  --frost-veil:rgb(0 0 0 / .3);
+ --frost-face:rgb(255 255 255 / .14);
+ --frost-soft:rgb(255 255 255 / .08);
+ --frost-strong:rgb(255 255 255 / .24);
+  --frost-edge:rgb(255 255 255 / .2);
+  --frost-edge-strong:rgb(255 255 255 / .3);
+  --frost-blur:blur(24px) saturate(140%);
+  --frost-ease:cubic-bezier(.2,.7,.2,1);
+  --ink:#fff;--muted:rgb(255 255 255 / .7);--line:rgb(255 255 255 / .2);--grid:rgb(255 255 255 / .12);
+  --paper:transparent;--surface:var(--frost-face);--surface-alt:var(--frost-soft);
+  --teal:#f3e3b0;--mint:#f3e3b0;--accent-ink:#fff;--dark:var(--frost-strong);
+  --amber:#f5e6bd;--rose:#f2c9a8;
+  --analytics-face:var(--frost-face);--analytics-edge:var(--frost-edge);--analytics-glint:rgb(255 255 255 / .08);
+  --metric-surface:var(--frost-soft);--glass-tone:var(--frost-face);--glass-tint:var(--frost-face);--glint:rgb(255 255 255 / .06);
+  --shell:transparent;--shell-rail:var(--frost-soft);--shell-active:var(--frost-strong);--shell-accent:transparent;--shell-border:var(--frost-edge);--shell-ink:#fff;
+  font-family:"Figtree",Inter,system-ui,sans-serif;
+  background:#3a3f47;
+}
+html:root[data-theme=dark]{--frost-veil:rgb(0 0 0 / .55);--frost-face:rgb(255 255 255 / .08);--frost-soft:rgb(255 255 255 / .04)}
+
+html body,html body:has(#market:not(.hide)){background:none!important;color:var(--ink);font-family:inherit}
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:linear-gradient(var(--frost-veil),var(--frost-veil)),url(frost-bg.jpg) center/cover no-repeat;transition:background .5s var(--frost-ease);
+  filter:saturate(.45) brightness(1.08) contrast(.82)}
+::selection{background:rgb(255 255 255 / .3);color:#fff}
+a,.textbtn,.cite{color:#fff}
+a:hover,.textbtn:hover{color:rgb(255 255 255 / .8)}
+.meta,.cap,small,.sub,#subtitle,.muted,label{color:var(--muted)}
+
+/* Header: floating glass bar like the reference sidebar card */
+html body .top,html[data-theme=light] body .top{position:sticky;top:12px;z-index:20;margin:12px clamp(10px,2vw,24px) 0;background:var(--frost-face)!important;
+  border:1px solid var(--frost-edge)!important;border-radius:24px;backdrop-filter:var(--frost-blur);-webkit-backdrop-filter:var(--frost-blur);box-shadow:0 10px 40px rgb(0 0 0 / .18)}
+html body .top .brand{color:#fff!important}
+html body .top .brand span{color:rgb(255 255 255 / .7)!important}
+html body input::placeholder,html body textarea::placeholder{color:rgb(255 255 255 / .6)!important;-webkit-text-fill-color:rgb(255 255 255 / .6)}
+html body .nav nav:not(#marketMenu nav),html body .nav nav.glass-lens{background:var(--frost-soft)!important;border:1px solid var(--frost-edge);border-radius:16px;padding:4px}
+html body .nav nav button{color:rgb(255 255 255 / .8);border-radius:12px}
+html body .nav nav button:hover{background:var(--frost-face);color:#fff}
+html body .nav nav button.active,html body .nav nav button[aria-pressed=true]{background:var(--frost-strong)!important;color:#fff!important;border:1px solid var(--frost-edge-strong)}
+html body .top .wrap.nav #themeToggle,html[data-theme=dark] body .top .wrap.nav #themeToggle{background:var(--frost-face)!important;color:#fff!important;border:1px solid var(--frost-edge);border-radius:999px}
+#themeToggle::before{background:rgb(255 255 255 / .85)}
+html body .top .tactile-tabs{background:var(--frost-soft)!important;border:1px solid var(--frost-edge)!important;border-radius:16px;box-shadow:none}
+html body .top .tactile-tabs>canvas{display:none}
+html body .top .tactile-tabs .tabs-indicator{background:var(--frost-strong)!important;border:1px solid var(--frost-edge-strong);border-radius:12px;box-shadow:inset 0 1px 0 rgb(255 255 255 / .25);transition:transform .3s var(--frost-ease),width .3s var(--frost-ease)}
+html body .top .tactile-tabs .tab-item,html body .top .tactile-tabs .tab-item span{color:rgb(255 255 255 / .72)!important;transition:color .2s var(--frost-ease)}
+html body .top .tactile-tabs .tab-item:hover,html body .top .tactile-tabs .tab-item:hover span,html body .top .tactile-tabs .tab-item.active,html body .top .tactile-tabs .tab-item.active span{color:#fff!important}
+html body .top #themeToggle span{color:#fff;opacity:.85}
+
+/* Glass surfaces */
+html body :is(.panel,.case,.date-wrap,.search,.chat-context,.chat-intro,.bubble,statement-chart,.bond-highlights>div,.payment-brief,.metrics>div,.issue-status div),
+html body #market :is(.panel,.macro-card),html body #market #macroPanel,html body #market .bond-summary{
+  background:var(--frost-face)!important;color:var(--ink);border:1px solid var(--frost-edge)!important;
+  backdrop-filter:var(--frost-blur);-webkit-backdrop-filter:var(--frost-blur);box-shadow:0 8px 32px rgb(0 0 0 / .12)}
+html body :is(.panel,#market .panel,.case,.chat-intro,#macroPanel,.bond-summary){border-radius:24px}
+html body :is(.date-wrap,.search,statement-chart,.bond-highlights>div,.payment-brief,.metrics>div,.bubble,.chat-context){border-radius:16px}
+html body #market :is(.panel,.macro-card)::after,html body .glass-lens::after{display:none!important}
+#market-material{opacity:.18}
+.case-art{opacity:.55;mix-blend-mode:screen}
+.case-tag i{background:#fff;box-shadow:0 0 0 3px rgb(255 255 255 / .15)}
+
+/* Nested blocks: lighter glass, no extra blur */
+html body :is(.chart-note,.inset,.highlight,.pay-state,.level-distribution button,#marketMenu .jump-group>strong),
+html body #market #macroPanel .macro-card,html[data-theme=light] body #market #macroPanel .macro-card:not(.selected),
+html body :is(.macro-card,.seg,.lightbtn,.pager button,kbd,.chips button,.timeline button,.cal-grid button,.cal-nav button,#today,#tapePlay){
+  background:var(--frost-soft)!important;color:var(--ink)!important;border-color:var(--frost-edge)!important}
+html body .macro-card{border-radius:16px}
+html body .tape{background:rgb(0 0 0 / .25)!important;color:#fff;backdrop-filter:var(--frost-blur);-webkit-backdrop-filter:var(--frost-blur);border-block:1px solid var(--frost-edge)}
+
+/* Buttons: hover lifts to white/10–30, active selection is white/20 with stronger rim */
+html body :is(.outline,.lightbtn,.primary,.case button,.iconbtn,.textbtn,.chips button,.timeline button,.seg button,.macro-card,.cal-grid button,#marketMenu summary,.pager button,.exchange-toolbar button){
+  transition:background-color .2s var(--frost-ease),border-color .2s var(--frost-ease),color .2s var(--frost-ease),transform .2s var(--frost-ease),box-shadow .2s var(--frost-ease)}
+html body :is(.outline,.iconbtn,#marketMenu summary,.date-wrap button){background:var(--frost-face)!important;color:#fff!important;border:1px solid var(--frost-edge)!important;border-radius:12px}
+html body .primary,html body .case button,html body #askForm button.primary{background:var(--frost-strong)!important;color:#fff!important;border:1px solid var(--frost-edge-strong)!important;border-radius:12px}
+html body :is(.outline,.lightbtn,.chips button,.timeline button,.seg button,.macro-card,.cal-grid button,.pager button,.iconbtn,#marketMenu summary,.exchange-toolbar button):hover{
+  background:var(--frost-face)!important;border-color:rgb(255 255 255 / .4)!important;color:#fff!important}
+html body :is(.primary,.case button):hover{background:rgb(255 255 255 / .3)!important;border-color:rgb(255 255 255 / .4)!important}
+html body :is(.outline,.lightbtn,.primary,.chips button,.macro-card,.case button,#marketMenu summary):hover{transform:translateY(-1px)}
+html body :is(button,.lightbtn):active{transform:scale(.97)}
+html body .seg{border-radius:12px;padding:3px}
+html body .seg button{background:transparent!important;border:1px solid transparent!important;border-radius:9px;color:rgb(255 255 255 / .75)!important}
+html body :is(.seg button.sel,.seg .sel,.seg button[aria-pressed=true],.timeline button.sel,.timeline .sel,.macro-card.selected,.macro-card[aria-pressed=true],.screen-tools [aria-pressed=true],.cal-grid button[aria-pressed=true],.cal-grid button[aria-pressed=true] b,.exchange-toolbar button[aria-pressed=true]),
+html body #market #macroPanel :is(.macro-card.selected,.macro-card[aria-pressed=true],.seg .sel),html[data-theme=light] body #market .macro-card[aria-pressed=true]{
+  background:var(--frost-strong)!important;color:#fff!important;border-color:var(--frost-edge-strong)!important;box-shadow:inset 0 1px 0 rgb(255 255 255 / .25)}
+:focus-visible{outline:2px solid rgb(255 255 255 / .85)!important;outline-offset:2px}
+
+/* Inputs */
+html body :is(input,select,textarea){color:#fff}
+html body :is(.filters input:not([type=checkbox]),.filters select,.mode-switch select,statement-chart select,#attentionFilter,.series-search input){background:var(--frost-soft)!important;border:1px solid var(--frost-edge)!important;border-radius:10px;color:#fff}
+html body option{background:#2b3038;color:#fff}
+::placeholder{color:rgb(255 255 255 / .55)}
+html body .search:focus-within{border-color:rgb(255 255 255 / .45)!important;background:var(--frost-strong)!important}
+
+/* Badges and status colours on glass */
+html body .badge{background:var(--frost-face);color:#fff;border-radius:999px}
+html body .badge.amber,html[data-theme=dark] body .card-title .badge.amber{background:rgb(252 215 127 / .18);color:#ffe7ad}
+html body .badge.green,html[data-theme=dark] body .card-title .badge.green{background:rgb(126 226 192 / .18);color:#c3f5e2}
+html body .badge.red,html[data-theme=dark] body .card-title .badge.red{background:rgb(253 176 168 / .2);color:#ffd2cc}
+html body .pay-state.ontime{background:rgb(126 226 192 / .2)!important;color:#c3f5e2!important}
+html body .pay-state.late{background:rgb(253 176 168 / .22)!important;color:#ffd2cc!important}
+html body .strip{background:rgb(252 215 127 / .14);border:1px solid rgb(252 215 127 / .35);color:#fff;border-radius:14px;backdrop-filter:var(--frost-blur);-webkit-backdrop-filter:var(--frost-blur)}
+:root .credit-conclusion{backdrop-filter:var(--frost-blur);-webkit-backdrop-filter:var(--frost-blur);border-radius:16px}
+:root .credit-conclusion.cc-danger{--cc-bg:rgb(253 176 168 / .16);--cc-ink:#ffd2cc}
+:root .credit-conclusion.cc-watch{--cc-bg:rgb(252 215 127 / .16);--cc-ink:#ffe7ad}
+:root .credit-conclusion.cc-low{--cc-bg:rgb(126 226 192 / .16);--cc-ink:#c3f5e2}
+:root .credit-conclusion.cc-neutral{--cc-bg:rgb(255 255 255 / .1);--cc-ink:#fff}
+:root .credit-conclusion.cc-unknown{--cc-bg:rgb(255 255 255 / .08);--cc-ink:rgb(255 255 255 / .85)}
+.credit-conclusion :is(p,span,a){color:#fff}
+
+/* Charts keep their size and readable labels */
+html body .week .stack{background:rgb(255 255 255 / .12)}
+html body .week:hover{background:var(--frost-soft)}
+html body .week.sel{outline-color:#fff}
+html body .chart,html body .exchange-chart,html body [class*=exchange-chart]{border-radius:16px;overflow:hidden}
+html body :is(.exchange-options,.exchange-toolbar .exchange-options){background:rgb(40 44 50 / .85)!important;color:#fff;border-color:var(--frost-edge)!important;backdrop-filter:var(--frost-blur)}
+html body .exchange-toolbar :is(button,.exchange-fit){background:var(--frost-soft)!important;color:#fff!important;border:1px solid var(--frost-edge);border-radius:10px}
+
+/* Tables */
+html body .tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:14px;border:1px solid var(--frost-edge)}
+html body th{background:var(--frost-soft);color:var(--muted)}
+html body td,html body th{border-color:var(--frost-edge)}
+html body .tablewrap tr:hover,html[data-theme=dark] body .tablewrap tr:hover{background:var(--frost-soft)}
+
+/* Menus and dialogs */
+html body #marketMenu nav{background:rgb(40 44 50 / .72)!important;border:1px solid var(--frost-edge)!important;border-radius:18px;backdrop-filter:var(--frost-blur);-webkit-backdrop-filter:var(--frost-blur);box-shadow:0 18px 50px rgb(0 0 0 / .3)}
+html body #marketMenu nav button{color:#fff}
+html body #marketMenu nav button:is(:hover,:focus-visible){background:var(--frost-face)!important;color:#fff!important}
+html body dialog,html body #radarGuide{background:rgb(40 44 50 / .62)!important;color:#fff;border:1px solid var(--frost-edge)!important;border-radius:24px;
+  backdrop-filter:var(--frost-blur);-webkit-backdrop-filter:var(--frost-blur);box-shadow:0 30px 90px rgb(0 0 0 / .4)}
+html body dialog::backdrop{background:rgb(0 0 0 / .35);backdrop-filter:blur(6px)}
+
+/* Assistant */
+html body #chat .chat-intro{background:var(--frost-face)!important}
+html body #chat .bubble:not(.user){background:var(--frost-soft)!important;border:1px solid var(--frost-edge)!important;padding:16px 20px;border-radius:20px}
+html body #chat .bubble.user,html[data-theme=dark] body .bubble.user{background:var(--frost-strong)!important;border:1px solid var(--frost-edge-strong)!important;color:#fff}
+html body #chat #askForm,html body #chat #askForm.glass-lens{background:var(--frost-face)!important;border:1px solid var(--frost-edge)!important;border-radius:24px;color:#fff;
+  backdrop-filter:var(--frost-blur);-webkit-backdrop-filter:var(--frost-blur);box-shadow:0 10px 40px rgb(0 0 0 / .2)}
+html body #chat #askForm:focus-within{border-color:rgb(255 255 255 / .4)!important}
+html body .model-picker,html body .model-picker.glass-lens,html body .model-picker select{background:var(--frost-soft)!important;color:#fff;border-color:var(--frost-edge)}
+html body #chat #askForm::after{display:none}
+
+/* Motion */
+@keyframes frost-view{from{opacity:0;transform:translateY(10px) scale(.995)}to{opacity:1;transform:none}}
+@keyframes frost-reveal{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@keyframes frost-message{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+#market:not(.hide),#chat:not(.hide){animation:frost-view .38s var(--frost-ease)}
+details[open]>:not(summary){animation:frost-reveal .24s var(--frost-ease)}
+.bubble.frost-new{animation:frost-message .36s var(--frost-ease) both}
+summary{cursor:pointer;transition:color .2s}
+summary:hover{color:rgb(255 255 255 / .8)}
+#detail.frost-busy{transition:opacity .2s}
+#detail.frost-busy .panel:has(.seg .sel){opacity:.85}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+  html body :is(button,.lightbtn,.macro-card):is(:hover,:active){transform:none!important}
+}
+
+/* Phone: filters wrap onto several rows, wide tables scroll inside their block */
+@media (max-width:760px){
+  html body .top{top:8px;margin:8px 8px 0;border-radius:20px}
+  html body :is(.panel,#market .panel,.case,.chat-intro,#macroPanel,.bond-summary){border-radius:20px}
+  html body :is(.seg,.timeline,.chips,.screen-tools,.exchange-toolbar,.filters,.row-links,.section-head){flex-wrap:wrap;white-space:normal;row-gap:6px}
+  html body .seg{display:flex;width:fit-content;max-width:100%}
+  html body .tablewrap{max-width:100%}
+  html body .tablewrap table{min-width:560px}
+}
