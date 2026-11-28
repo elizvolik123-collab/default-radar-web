@@ -2,9 +2,9 @@
 html:root,html:root[data-theme=dark],html:root[data-theme=light]{
   color-scheme:dark;
   --frost-veil:rgb(0 0 0 / .3);
-  --frost-face:rgb(255 255 255 / .1);
-  --frost-soft:rgb(255 255 255 / .05);
-  --frost-strong:rgb(255 255 255 / .2);
+ --frost-face:rgb(255 255 255 / .14);
+ --frost-soft:rgb(255 255 255 / .08);
+ --frost-strong:rgb(255 255 255 / .24);
   --frost-edge:rgb(255 255 255 / .2);
   --frost-edge-strong:rgb(255 255 255 / .3);
   --frost-blur:blur(24px) saturate(140%);
